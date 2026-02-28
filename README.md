@@ -28,3 +28,7 @@ percept scroll --block <id> --amount <pixels>                  # Scroll a specif
 ```
 cargo install percept
 ```
+
+## Acknowledgments
+
+percept uses the [OmniParser](https://github.com/microsoft/OmniParser) icon detection model by Microsoft, which is based on [YOLOv8](https://github.com/ultralytics/ultralytics) by Ultralytics. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for full attribution and license details.
