@@ -27,7 +27,7 @@ fn test_help_output() {
         .arg("--help")
         .assert()
         .success()
-        .stdout(predicate::str::contains("annotates screenshots"))
+        .stdout(predicate::str::contains("accessibility APIs"))
         .stdout(predicate::str::contains("screenshot"))
         .stdout(predicate::str::contains("click"))
         .stdout(predicate::str::contains("type"))

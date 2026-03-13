@@ -7,6 +7,7 @@ const DEFAULT_SCROLL_AMOUNT: u32 = 3;
 
 pub fn run_scroll(
     block_id: Option<u32>,
+    element_id: Option<u32>,
     direction: &str,
     amount: Option<u32>,
 ) -> Result<()> {
@@ -19,8 +20,18 @@ pub fn run_scroll(
         ),
     }
 
-    // If block specified, move mouse to it first
-    if let Some(id) = block_id {
+    // If element specified, move mouse to its center
+    if let Some(eid) = element_id {
+        let state = PerceptState::load()?;
+        let elem = state.get_element(eid)?;
+        if let Some(ref bounds) = elem.bounds {
+            let (x, y) = bounds.center();
+            platform::move_mouse(x, y).context(format!(
+                "Failed to move mouse to element {} at ({}, {})",
+                eid, x, y
+            ))?;
+        }
+    } else if let Some(id) = block_id {
         let state = PerceptState::load()?;
         let block = state.get_block(id)?;
         let (x, y) = block.bbox.center_pixels(state.image_width, state.image_height);
@@ -34,12 +45,18 @@ pub fn run_scroll(
     let scroll_amount = amount.unwrap_or(DEFAULT_SCROLL_AMOUNT);
     platform::scroll(direction, scroll_amount)?;
 
-    match block_id {
-        Some(id) => println!(
-            "Scrolled {} {} clicks in block {}",
-            direction, scroll_amount, id
-        ),
-        None => println!("Scrolled {} {} clicks", direction, scroll_amount),
+    let target = if let Some(eid) = element_id {
+        format!("in element {}", eid)
+    } else if let Some(id) = block_id {
+        format!("in block {}", id)
+    } else {
+        String::new()
+    };
+
+    if target.is_empty() {
+        println!("Scrolled {} {} clicks", direction, scroll_amount);
+    } else {
+        println!("Scrolled {} {} clicks {}", direction, scroll_amount, target);
     }
 
     Ok(())

@@ -9,7 +9,7 @@ use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(name = "percept")]
-#[command(about = "CLI tool that annotates screenshots using OmniParser and provides computer interaction via block IDs")]
+#[command(about = "CLI tool for AI agents to observe and interact with desktop UIs via accessibility APIs and annotated screenshots")]
 #[command(version)]
 struct Cli {
     #[command(subcommand)]
@@ -18,6 +18,56 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Query the accessibility tree of the focused or specified application (primary command)
+    Observe {
+        /// Target application by name
+        #[arg(long)]
+        app: Option<String>,
+
+        /// Target application by PID
+        #[arg(long)]
+        pid: Option<u32>,
+
+        /// Maximum tree depth to traverse (default: 10)
+        #[arg(long, default_value = "10")]
+        max_depth: u32,
+
+        /// Maximum number of elements to return (default: 500)
+        #[arg(long, default_value = "500")]
+        max_elements: u32,
+
+        /// Filter elements by role (comma-separated, e.g. "button,text_field")
+        #[arg(long)]
+        role: Option<String>,
+
+        /// Include hidden/offscreen elements
+        #[arg(long)]
+        include_hidden: bool,
+
+        /// Output format: flat (JSON, default) or tree (human-readable)
+        #[arg(long, default_value = "flat")]
+        format: String,
+
+        /// Include platform-specific raw attributes in output
+        #[arg(long)]
+        raw: bool,
+    },
+
+    /// Perform an accessibility action on an element
+    Interact {
+        /// Element ID from the last observe/screenshot
+        #[arg(long)]
+        element: u32,
+
+        /// Action to perform (press, set-value, focus, toggle, expand, collapse, select, show-menu)
+        #[arg(long)]
+        action: String,
+
+        /// Value for set-value action
+        #[arg(long)]
+        value: Option<String>,
+    },
+
     /// Take a screenshot, annotate with numbered blocks, and save to path
     Screenshot {
         /// Output path for the screenshot
@@ -47,20 +97,36 @@ enum Commands {
         /// Print timing information
         #[arg(long)]
         debug: bool,
+
+        /// Annotate using only accessibility data (skip YOLO inference)
+        #[arg(long)]
+        accessibility_only: bool,
+
+        /// Disable accessibility data enrichment (YOLO only, old behavior)
+        #[arg(long)]
+        no_accessibility: bool,
     },
 
-    /// Click the center of an annotated block
+    /// Click the center of an annotated block or accessibility element
     Click {
-        /// Block ID to click
+        /// Block ID to click (from YOLO detection)
         #[arg(long)]
-        block: u32,
+        block: Option<u32>,
 
-        /// Pixel offset relative to block center (format: x,y)
+        /// Element ID to click (from accessibility tree)
+        #[arg(long)]
+        element: Option<u32>,
+
+        /// Pixel offset relative to center (format: x,y)
         #[arg(long)]
         offset: Option<String>,
+
+        /// Use native accessibility press action instead of mouse simulation
+        #[arg(long)]
+        action: bool,
     },
 
-    /// Type text at the current cursor position or in a specific block
+    /// Type text at the current cursor position or in a specific block/element
     Type {
         /// Text to type
         #[arg(long)]
@@ -69,9 +135,13 @@ enum Commands {
         /// Block ID to click before typing
         #[arg(long)]
         block: Option<u32>,
+
+        /// Element ID to target (tries set-value first, falls back to click+type)
+        #[arg(long)]
+        element: Option<u32>,
     },
 
-    /// Scroll the screen or within a specific block
+    /// Scroll the screen or within a specific block/element
     Scroll {
         /// Scroll direction (up, down, left, right)
         #[arg(long)]
@@ -80,6 +150,10 @@ enum Commands {
         /// Block ID to scroll within
         #[arg(long)]
         block: Option<u32>,
+
+        /// Element ID to scroll within
+        #[arg(long)]
+        element: Option<u32>,
 
         /// Scroll amount in clicks (default: 3)
         #[arg(long)]
@@ -140,6 +214,34 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
+        Commands::Observe {
+            app,
+            pid,
+            max_depth,
+            max_elements,
+            role,
+            include_hidden,
+            format,
+            raw,
+        } => {
+            commands::observe::run_observe(
+                app.as_deref(),
+                pid,
+                max_depth,
+                max_elements,
+                role.as_deref(),
+                !include_hidden, // visible_only = !include_hidden
+                &format,
+                raw,
+            )?;
+        }
+        Commands::Interact {
+            element,
+            action,
+            value,
+        } => {
+            commands::interact::run_interact(element, &action, value.as_deref())?;
+        }
         Commands::Screenshot {
             output,
             scale,
@@ -148,6 +250,8 @@ fn main() -> Result<()> {
             iou_threshold,
             max_blocks,
             debug,
+            accessibility_only,
+            no_accessibility,
         } => {
             commands::screenshot::run_screenshot(
                 &output,
@@ -157,24 +261,43 @@ fn main() -> Result<()> {
                 iou_threshold,
                 max_blocks,
                 debug,
+                accessibility_only,
+                no_accessibility,
             )?;
         }
-        Commands::Click { block, offset } => {
-            let offset = match offset {
+        Commands::Click {
+            block,
+            element,
+            offset,
+            action,
+        } => {
+            let parsed_offset = match offset {
                 Some(ref s) => Some(commands::click::parse_offset(s)?),
                 None => None,
             };
-            commands::click::run_click(block, offset)?;
+
+            if let Some(eid) = element {
+                commands::click::run_click_element(eid, action, parsed_offset)?;
+            } else if let Some(bid) = block {
+                commands::click::run_click(bid, parsed_offset)?;
+            } else {
+                anyhow::bail!("Either --block or --element is required for click");
+            }
         }
-        Commands::Type { text, block } => {
-            commands::type_text::run_type(block, &text)?;
+        Commands::Type {
+            text,
+            block,
+            element,
+        } => {
+            commands::type_text::run_type(block, element, &text)?;
         }
         Commands::Scroll {
             direction,
             block,
+            element,
             amount,
         } => {
-            commands::scroll::run_scroll(block, &direction, amount)?;
+            commands::scroll::run_scroll(block, element, &direction, amount)?;
         }
         Commands::Setup => {
             let rt = tokio::runtime::Runtime::new()?;

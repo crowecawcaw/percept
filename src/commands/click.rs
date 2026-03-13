@@ -1,8 +1,10 @@
 use anyhow::{Context, Result};
 
 use crate::platform;
+use crate::platform::accessibility;
 use crate::state::PerceptState;
 
+/// Click a YOLO block by ID
 pub fn run_click(block_id: u32, offset: Option<(i32, i32)>) -> Result<()> {
     let state = PerceptState::load()?;
     let block = state.get_block(block_id)?;
@@ -19,6 +21,42 @@ pub fn run_click(block_id: u32, offset: Option<(i32, i32)>) -> Result<()> {
     ))?;
 
     println!("Clicked block {} at ({}, {})", block_id, x, y);
+
+    Ok(())
+}
+
+/// Click an accessibility element by ID, using either native action or mouse sim
+pub fn run_click_element(
+    element_id: u32,
+    use_native_action: bool,
+    offset: Option<(i32, i32)>,
+) -> Result<()> {
+    if use_native_action {
+        // Use accessibility API's native press action
+        accessibility::perform_action(element_id, "press", None)?;
+        println!("Pressed element {} via accessibility API", element_id);
+    } else {
+        // Simulate mouse click at element center
+        let state = PerceptState::load()?;
+        let elem = state.get_element(element_id)?;
+
+        let bounds = elem.bounds.as_ref().ok_or_else(|| {
+            anyhow::anyhow!("Element {} has no bounds. Use --action press instead.", element_id)
+        })?;
+
+        let (cx, cy) = bounds.center();
+        let (x, y) = match offset {
+            Some((ox, oy)) => (cx + ox, cy + oy),
+            None => (cx, cy),
+        };
+
+        platform::click_at(x, y).context(format!(
+            "Failed to click at ({}, {})",
+            x, y
+        ))?;
+
+        println!("Clicked element {} at ({}, {})", element_id, x, y);
+    }
 
     Ok(())
 }
