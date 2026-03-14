@@ -10,7 +10,7 @@ use tempfile::TempDir;
 #[test]
 fn test_state_file_format() {
     let tmp = TempDir::new().unwrap();
-    let data_dir = tmp.path().join("percept");
+    let data_dir = tmp.path().join("agent-desktop");
     fs::create_dir_all(&data_dir).unwrap();
 
     let state = serde_json::json!({

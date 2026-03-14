@@ -1,5 +1,5 @@
 [package]
-name = "percept"
+name = "agent-desktop"
 version = "0.1.0"
 edition = "2021"
 description = "CLI tool for AI agents to observe and interact with desktop UIs via accessibility APIs"

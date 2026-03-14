@@ -5,12 +5,12 @@ use std::path::PathBuf;
 use crate::types::{AccessibilityElement, AccessibilitySnapshot};
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct PerceptState {
+pub struct AppState {
     #[serde(default)]
     pub accessibility: Option<AccessibilitySnapshot>,
 }
 
-impl PerceptState {
+impl AppState {
     pub fn from_accessibility(snapshot: AccessibilitySnapshot) -> Self {
         Self {
             accessibility: Some(snapshot),
@@ -23,9 +23,9 @@ impl PerceptState {
         } else {
             dirs::data_dir().unwrap_or_else(|| PathBuf::from("."))
         };
-        let data_dir = base.join("percept");
+        let data_dir = base.join("agent-desktop");
         std::fs::create_dir_all(&data_dir)
-            .context("Failed to create percept data directory")?;
+            .context("Failed to create agent-desktop data directory")?;
         Ok(data_dir.join("state.json"))
     }
 
@@ -41,11 +41,11 @@ impl PerceptState {
         let path = Self::state_path()?;
         if !path.exists() {
             anyhow::bail!(
-                "No state found. Run `percept observe` first."
+                "No state found. Run `agent-desktop observe` first."
             );
         }
         let json = std::fs::read_to_string(&path).context("Failed to read state file")?;
-        let state: PerceptState =
+        let state: AppState =
             serde_json::from_str(&json).context("Failed to parse state file")?;
         Ok(state)
     }
@@ -56,7 +56,7 @@ impl PerceptState {
             .as_ref()
             .ok_or_else(|| {
                 anyhow::anyhow!(
-                    "No accessibility data available. Run `percept observe` first."
+                    "No accessibility data available. Run `agent-desktop observe` first."
                 )
             })?
             .elements

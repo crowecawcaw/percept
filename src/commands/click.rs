@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 
 use crate::platform;
 use crate::platform::accessibility;
-use crate::state::PerceptState;
+use crate::state::AppState;
 
 /// Click an accessibility element by ID, using either native action or mouse sim
 pub fn run_click_element(
@@ -16,7 +16,7 @@ pub fn run_click_element(
         println!("Pressed element {} via accessibility API", element_id);
     } else {
         // Simulate mouse click at element center
-        let state = PerceptState::load()?;
+        let state = AppState::load()?;
         let elem = state.get_element(element_id)?;
 
         let bounds = elem.bounds.as_ref().ok_or_else(|| {

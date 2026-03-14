@@ -130,7 +130,7 @@ impl super::AccessibilityProvider for WindowsAccessibilityProvider {
             .get(&element_id)
             .ok_or_else(|| {
                 anyhow::anyhow!(
-                    "Element {} not found. Run `percept observe` first.",
+                    "Element {} not found. Run `agent-desktop observe` first.",
                     element_id
                 )
             })?;

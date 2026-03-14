@@ -1,4 +1,4 @@
-//! End-to-end tests for the percept CLI.
+//! End-to-end tests for the agent-desktop CLI.
 
 use assert_cmd::Command;
 use predicates::prelude::*;
@@ -6,8 +6,8 @@ use std::fs;
 use tempfile::TempDir;
 
 #[allow(deprecated)]
-fn percept_cmd() -> Command {
-    Command::cargo_bin("percept").unwrap()
+fn agent_desktop_cmd() -> Command {
+    Command::cargo_bin("agent-desktop").unwrap()
 }
 
 // =============================================================================
@@ -16,7 +16,7 @@ fn percept_cmd() -> Command {
 
 #[test]
 fn test_help_output() {
-    percept_cmd()
+    agent_desktop_cmd()
         .arg("--help")
         .assert()
         .success()
@@ -29,17 +29,17 @@ fn test_help_output() {
 
 #[test]
 fn test_version_in_help() {
-    percept_cmd()
+    agent_desktop_cmd()
         .arg("--help")
         .assert()
         .success()
         .stdout(predicate::str::contains("v0."))
-        .stdout(predicate::str::contains("percept"));
+        .stdout(predicate::str::contains("agent-desktop"));
 }
 
 #[test]
 fn test_no_subcommand_shows_help() {
-    percept_cmd()
+    agent_desktop_cmd()
         .assert()
         .failure()
         .stderr(predicate::str::contains("Usage"));
@@ -51,7 +51,7 @@ fn test_no_subcommand_shows_help() {
 
 #[test]
 fn test_screenshot_help() {
-    percept_cmd()
+    agent_desktop_cmd()
         .args(["screenshot", "--help"])
         .assert()
         .success()
@@ -61,7 +61,7 @@ fn test_screenshot_help() {
 
 #[test]
 fn test_screenshot_requires_output() {
-    percept_cmd()
+    agent_desktop_cmd()
         .arg("screenshot")
         .assert()
         .failure()
@@ -74,7 +74,7 @@ fn test_screenshot_fails_without_screenshot_tool() {
     let tmp = TempDir::new().unwrap();
     let output = tmp.path().join("screen.png");
 
-    percept_cmd()
+    agent_desktop_cmd()
         .args(["screenshot", "--output", output.to_str().unwrap()])
         .assert()
         .failure()
@@ -91,7 +91,7 @@ fn test_screenshot_fails_without_screenshot_tool() {
 
 #[test]
 fn test_click_help() {
-    percept_cmd()
+    agent_desktop_cmd()
         .args(["click", "--help"])
         .assert()
         .success()
@@ -101,7 +101,7 @@ fn test_click_help() {
 
 #[test]
 fn test_click_requires_element() {
-    percept_cmd()
+    agent_desktop_cmd()
         .arg("click")
         .assert()
         .failure()
@@ -111,25 +111,25 @@ fn test_click_requires_element() {
 #[test]
 fn test_click_without_state_fails() {
     let tmp = TempDir::new().unwrap();
-    percept_cmd()
+    agent_desktop_cmd()
         .args(["click", "--element", "1"])
         .env("HOME", tmp.path())
         .env("XDG_DATA_HOME", tmp.path().join("data"))
         .assert()
         .failure()
-        .stderr(predicate::str::contains("percept observe"));
+        .stderr(predicate::str::contains("agent-desktop observe"));
 }
 
 #[test]
 fn test_click_invalid_offset_format() {
     let tmp = TempDir::new().unwrap();
-    let data_dir = tmp.path().join("percept");
+    let data_dir = tmp.path().join("agent-desktop");
     fs::create_dir_all(&data_dir).unwrap();
 
     let state = serde_json::json!({ "accessibility": null });
     fs::write(data_dir.join("state.json"), state.to_string()).unwrap();
 
-    percept_cmd()
+    agent_desktop_cmd()
         .args(["click", "--element", "1", "--offset", "invalid"])
         .env("HOME", tmp.path())
         .env("XDG_DATA_HOME", tmp.path())
@@ -144,7 +144,7 @@ fn test_click_invalid_offset_format() {
 
 #[test]
 fn test_type_help() {
-    percept_cmd()
+    agent_desktop_cmd()
         .args(["type", "--help"])
         .assert()
         .success()
@@ -154,7 +154,7 @@ fn test_type_help() {
 
 #[test]
 fn test_type_requires_text() {
-    percept_cmd()
+    agent_desktop_cmd()
         .arg("type")
         .assert()
         .failure()
@@ -167,7 +167,7 @@ fn test_type_requires_text() {
 
 #[test]
 fn test_scroll_help() {
-    percept_cmd()
+    agent_desktop_cmd()
         .args(["scroll", "--help"])
         .assert()
         .success()
@@ -178,7 +178,7 @@ fn test_scroll_help() {
 
 #[test]
 fn test_scroll_requires_direction() {
-    percept_cmd()
+    agent_desktop_cmd()
         .arg("scroll")
         .assert()
         .failure()
@@ -187,7 +187,7 @@ fn test_scroll_requires_direction() {
 
 #[test]
 fn test_scroll_invalid_direction() {
-    percept_cmd()
+    agent_desktop_cmd()
         .args(["scroll", "--direction", "diagonal"])
         .assert()
         .failure()
@@ -197,7 +197,7 @@ fn test_scroll_invalid_direction() {
 #[test]
 fn test_scroll_without_element_no_state_needed() {
     // Scroll without --element should not require state, only platform tools
-    let result = percept_cmd()
+    let result = agent_desktop_cmd()
         .args(["scroll", "--direction", "up"])
         .assert()
         .failure();

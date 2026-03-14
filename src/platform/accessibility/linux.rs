@@ -518,7 +518,7 @@ async fn perform_action_async(
             .cloned()
             .ok_or_else(|| {
                 anyhow::anyhow!(
-                    "Element {} not found. Run `percept observe` first.",
+                    "Element {} not found. Run `agent-desktop observe` first.",
                     element_id
                 )
             })?
@@ -558,7 +558,7 @@ async fn perform_action_async(
             } else {
                 anyhow::bail!(
                     "AT-SPI2 Value interface only supports numeric values. \
-                     Use `percept type --element {} --text \"{}\"` for text.",
+                     Use `agent-desktop type --element {} --text \"{}\"` for text.",
                     element_id,
                     text
                 );

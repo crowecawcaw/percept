@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use crate::platform::accessibility;
 use crate::query;
-use crate::state::PerceptState;
+use crate::state::AppState;
 use crate::types::*;
 
 pub fn run_observe(
@@ -42,7 +42,7 @@ pub fn run_observe(
     };
 
     // Save full state for subsequent interact/click commands
-    let state = PerceptState::from_accessibility(snapshot.clone());
+    let state = AppState::from_accessibility(snapshot.clone());
     state.save()?;
 
     // Show role distribution
@@ -122,16 +122,16 @@ pub fn run_observe_silent(app: Option<&str>, pid: Option<u32>) -> Result<()> {
     };
 
     let snapshot = accessibility::get_tree(&target, &opts)?;
-    let state = PerceptState::from_accessibility(snapshot);
+    let state = AppState::from_accessibility(snapshot);
     state.save()?;
     Ok(())
 }
 
 /// Show a specific element and its subtree from the last observe state.
 pub fn run_observe_element(element_id: u32, format: &str) -> Result<()> {
-    let state = PerceptState::load()?;
+    let state = AppState::load()?;
     let snapshot = state.accessibility.as_ref().ok_or_else(|| {
-        anyhow::anyhow!("No accessibility data. Run `percept observe` first.")
+        anyhow::anyhow!("No accessibility data. Run `agent-desktop observe` first.")
     })?;
 
     // Collect element and all descendants

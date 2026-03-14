@@ -271,7 +271,7 @@ impl super::AccessibilityProvider for MacOSAccessibilityProvider {
             .get(&element_id)
             .ok_or_else(|| {
                 anyhow::anyhow!(
-                    "Element {} not found. Run `percept observe` first.",
+                    "Element {} not found. Run `agent-desktop observe` first.",
                     element_id
                 )
             })?;
@@ -348,7 +348,7 @@ impl super::AccessibilityProvider for MacOSAccessibilityProvider {
             Ok(PermissionStatus::Granted)
         } else {
             Ok(PermissionStatus::Denied {
-                instructions: "percept needs Accessibility permission.\n\n\
+                instructions: "agent-desktop needs Accessibility permission.\n\n\
                     1. Open System Preferences → Privacy & Security → Accessibility\n\
                     2. Click the lock to make changes\n\
                     3. Add your terminal app (Terminal.app, iTerm2, Alacritty, etc.)\n\

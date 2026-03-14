@@ -1,10 +1,10 @@
 use anyhow::{Context, Result};
 
-use crate::state::PerceptState;
+use crate::state::AppState;
 
 /// Read text content from an accessibility element (name + value)
 pub fn run_read_element(element_id: u32) -> Result<()> {
-    let state = PerceptState::load()?;
+    let state = AppState::load()?;
     let elem = state.get_element(element_id)?;
 
     let mut output = serde_json::Map::new();

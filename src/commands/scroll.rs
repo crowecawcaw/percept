@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 
 use crate::platform;
-use crate::state::PerceptState;
+use crate::state::AppState;
 
 const DEFAULT_SCROLL_AMOUNT: u32 = 3;
 
@@ -21,7 +21,7 @@ pub fn run_scroll(
 
     // If element specified, move mouse to its center
     if let Some(eid) = element_id {
-        let state = PerceptState::load()?;
+        let state = AppState::load()?;
         let elem = state.get_element(eid)?;
         if let Some(ref bounds) = elem.bounds {
             let (x, y) = bounds.center();

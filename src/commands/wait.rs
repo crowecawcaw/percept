@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 
 use crate::platform::accessibility;
 use crate::query;
-use crate::state::PerceptState;
+use crate::state::AppState;
 use crate::types::*;
 
 pub fn run_wait(
@@ -23,7 +23,7 @@ pub fn run_wait(
         Some(AppTarget::ByName(name.to_string()))
     } else {
         // Try to reuse last observe target
-        let state = PerceptState::load().ok();
+        let state = AppState::load().ok();
         state
             .and_then(|s| s.accessibility)
             .filter(|snap| snap.pid != 0)
@@ -31,7 +31,7 @@ pub fn run_wait(
     };
 
     let target = target.ok_or_else(|| {
-        anyhow::anyhow!("No app target. Specify --app or --pid, or run `percept observe --app <name>` first.")
+        anyhow::anyhow!("No app target. Specify --app or --pid, or run `agent-desktop observe --app <name>` first.")
     })?;
 
     let opts = QueryOptions {
@@ -51,7 +51,7 @@ pub fn run_wait(
 
         if !ids.is_empty() {
             // Save state so subsequent commands can use these elements
-            let state = PerceptState::from_accessibility(snapshot.clone());
+            let state = AppState::from_accessibility(snapshot.clone());
             state.save()?;
 
             let matched: Vec<_> = snapshot

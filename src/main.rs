@@ -8,16 +8,16 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "percept")]
+#[command(name = "agent-desktop")]
 #[command(about = concat!("v", env!("CARGO_PKG_VERSION"), " — CLI tool for AI agents to observe and interact with desktop UIs via accessibility APIs"))]
 #[command(long_about = concat!("v", env!("CARGO_PKG_VERSION"), " — CLI tool for AI agents to observe and interact with desktop UIs via accessibility APIs
 
-  percept observe --app Safari
-  percept observe --app Safari --query 'text_field[name*=\"Address\"]'
-  percept click --app Safari --query 'toolbar > text_field[name*=\"Address\"]'
-  percept type --text \"https://example.com\"
-  percept key --name cmd+n
-  percept wait --app Safari --query 'text_field[value*=\"loaded\"]' --timeout 5"))]
+  agent-desktop observe --app Safari
+  agent-desktop observe --app Safari --query 'text_field[name*=\"Address\"]'
+  agent-desktop click --app Safari --query 'toolbar > text_field[name*=\"Address\"]'
+  agent-desktop type --text \"https://example.com\"
+  agent-desktop key --name cmd+n
+  agent-desktop wait --app Safari --query 'text_field[value*=\"loaded\"]' --timeout 5"))]
 #[command(disable_version_flag = true)]
 struct Cli {
     #[command(subcommand)]
@@ -301,9 +301,9 @@ fn resolve_element(element: Option<u32>, query: Option<&str>) -> Result<u32> {
         (None, Some(q)) => {
             let selector = crate::query::parse_selector(q)
                 .map_err(|e| anyhow::anyhow!("Invalid query: {}", e))?;
-            let state = crate::state::PerceptState::load()?;
+            let state = crate::state::AppState::load()?;
             let snapshot = state.accessibility.as_ref().ok_or_else(|| {
-                anyhow::anyhow!("No accessibility data. Run `percept observe` first.")
+                anyhow::anyhow!("No accessibility data. Run `agent-desktop observe` first.")
             })?;
             let ids = crate::query::query_elements(&snapshot.elements, &selector);
             match ids.len() {

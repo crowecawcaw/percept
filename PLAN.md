@@ -1,14 +1,14 @@
-# percept — Implementation Plan
+# agent-desktop — Implementation Plan
 
 ## Vision Shift: Accessibility-First, Screenshots as Supplement
 
-percept is pivoting from a screenshot-centric approach (YOLO-based visual detection) to an **accessibility-API-first** approach. Accessibility APIs provide structured, semantic data about UI elements — their roles, names, states, positions, and hierarchy — directly from the OS. This is far more reliable and parseable for AI agents than inferring UI structure from pixels.
+agent-desktop is pivoting from a screenshot-centric approach (YOLO-based visual detection) to an **accessibility-API-first** approach. Accessibility APIs provide structured, semantic data about UI elements — their roles, names, states, positions, and hierarchy — directly from the OS. This is far more reliable and parseable for AI agents than inferring UI structure from pixels.
 
 **The screenshot + YOLO pipeline is preserved** but becomes a secondary/fallback mechanism. The primary interaction model is now:
 
-1. `percept observe` — query accessibility tree, get structured element data
-2. `percept interact --element <id> --action press` — interact via accessibility element IDs
-3. `percept screenshot` — still available, now enriched with accessibility annotations
+1. `agent-desktop observe` — query accessibility tree, get structured element data
+2. `agent-desktop interact --element <id> --action press` — interact via accessibility element IDs
+3. `agent-desktop screenshot` — still available, now enriched with accessibility annotations
 
 ---
 
@@ -320,22 +320,22 @@ pub enum ElementRole {
 
 ## New CLI Commands
 
-### `percept observe` — Read Accessibility Tree (Primary Command)
+### `agent-desktop observe` — Read Accessibility Tree (Primary Command)
 
 This is the **main command agents should use**. Returns structured JSON of the UI accessibility tree.
 
 ```
-percept observe                                      # Full focused-app accessibility tree (JSON)
-percept observe --app "Firefox"                      # Specific app by name
-percept observe --pid 1234                           # Specific app by PID
-percept observe --max-depth 5                        # Limit tree depth (default: 10)
-percept observe --max-elements 200                   # Limit total elements (default: 500)
-percept observe --role button,text_field             # Filter by role
-percept observe --visible-only                       # Only visible/on-screen elements (default)
-percept observe --include-hidden                     # Include hidden/offscreen elements
-percept observe --format tree                        # Indented tree format (human-readable)
-percept observe --format flat                        # Flat list format (default, easier to parse)
-percept observe --raw                                # Include platform-specific raw attributes
+agent-desktop observe                                      # Full focused-app accessibility tree (JSON)
+agent-desktop observe --app "Firefox"                      # Specific app by name
+agent-desktop observe --pid 1234                           # Specific app by PID
+agent-desktop observe --max-depth 5                        # Limit tree depth (default: 10)
+agent-desktop observe --max-elements 200                   # Limit total elements (default: 500)
+agent-desktop observe --role button,text_field             # Filter by role
+agent-desktop observe --visible-only                       # Only visible/on-screen elements (default)
+agent-desktop observe --include-hidden                     # Include hidden/offscreen elements
+agent-desktop observe --format tree                        # Indented tree format (human-readable)
+agent-desktop observe --format flat                        # Flat list format (default, easier to parse)
+agent-desktop observe --raw                                # Include platform-specific raw attributes
 ```
 
 **Output format** (JSON to stdout):
@@ -352,7 +352,7 @@ percept observe --raw                                # Include platform-specific
       "id": 1,
       "role": "window",
       "role_name": "window",
-      "name": "percept - GitHub — Firefox",
+      "name": "agent-desktop - GitHub — Firefox",
       "bounds": {"x": 0, "y": 25, "width": 1920, "height": 1055},
       "bbox": {"x1": 0.0, "y1": 0.023, "x2": 1.0, "y2": 1.0},
       "actions": ["raise", "close"],
@@ -381,7 +381,7 @@ percept observe --raw                                # Include platform-specific
 
 ```
 Firefox (pid: 1234)
-├── [1] window "percept - GitHub — Firefox" (0,25 1920x1055)
+├── [1] window "agent-desktop - GitHub — Firefox" (0,25 1920x1055)
 │   ├── [2] toolbar "Navigation" (0,25 1920x40)
 │   │   ├── [3] button "Back" (10,30 30x30) [press]
 │   │   ├── [4] button "Forward" (45,30 30x30) [press] {disabled}
@@ -390,37 +390,37 @@ Firefox (pid: 1234)
 │   ├── [15] tab_group (0,65 1920x990)
 │   │   ├── [16] tab "GitHub" {selected}
 │   │   └── [17] tab "Google"
-│   └── [30] web_area "percept - GitHub" (0,95 1920x960)
-│       ├── [31] heading "percept"
+│   └── [30] web_area "agent-desktop - GitHub" (0,95 1920x960)
+│       ├── [31] heading "agent-desktop"
 │       ├── [32] link "README.md"
 │       └── [33] button "Code"
 ```
 
-### `percept interact` — Perform Accessibility Actions
+### `agent-desktop interact` — Perform Accessibility Actions
 
 ```
-percept interact --element <id> --action press       # Press/click element via accessibility API
-percept interact --element <id> --action set-value --value "hello"  # Set text field value
-percept interact --element <id> --action focus        # Focus element
-percept interact --element <id> --action toggle       # Toggle checkbox
-percept interact --element <id> --action expand       # Expand tree node / dropdown
-percept interact --element <id> --action collapse     # Collapse tree node / dropdown
-percept interact --element <id> --action scroll-down  # Scroll within element
-percept interact --element <id> --action select       # Select item in list
-percept interact --element <id> --action show-menu    # Show context menu
+agent-desktop interact --element <id> --action press       # Press/click element via accessibility API
+agent-desktop interact --element <id> --action set-value --value "hello"  # Set text field value
+agent-desktop interact --element <id> --action focus        # Focus element
+agent-desktop interact --element <id> --action toggle       # Toggle checkbox
+agent-desktop interact --element <id> --action expand       # Expand tree node / dropdown
+agent-desktop interact --element <id> --action collapse     # Collapse tree node / dropdown
+agent-desktop interact --element <id> --action scroll-down  # Scroll within element
+agent-desktop interact --element <id> --action select       # Select item in list
+agent-desktop interact --element <id> --action show-menu    # Show context menu
 ```
 
 This uses **native accessibility actions** (not simulated mouse clicks) which is more reliable — it works even for elements that are partially obscured or in background windows.
 
-### Modified: `percept screenshot` — Now Includes Accessibility Data
+### Modified: `agent-desktop screenshot` — Now Includes Accessibility Data
 
 The screenshot command gains accessibility enrichment:
 
 ```
-percept screenshot --output out.png                       # Screenshot + YOLO annotations + accessibility data in JSON
-percept screenshot --output out.png --no-annotations      # Plain screenshot, no visual annotations
-percept screenshot --output out.png --accessibility-only  # Skip YOLO, annotate only from accessibility data
-percept screenshot --output out.png --no-accessibility    # Old behavior: YOLO only, no accessibility data
+agent-desktop screenshot --output out.png                       # Screenshot + YOLO annotations + accessibility data in JSON
+agent-desktop screenshot --output out.png --no-annotations      # Plain screenshot, no visual annotations
+agent-desktop screenshot --output out.png --accessibility-only  # Skip YOLO, annotate only from accessibility data
+agent-desktop screenshot --output out.png --no-accessibility    # Old behavior: YOLO only, no accessibility data
 ```
 
 **Changes**:
@@ -429,12 +429,12 @@ percept screenshot --output out.png --no-accessibility    # Old behavior: YOLO o
 - JSON block list output includes accessibility metadata (role, name, actions) for each block
 - YOLO blocks that overlap with accessibility elements inherit the accessibility metadata
 
-### Modified: `percept click` — Supports Both Block and Element IDs
+### Modified: `agent-desktop click` — Supports Both Block and Element IDs
 
 ```
-percept click --block <id>                  # Click by YOLO block ID (existing behavior)
-percept click --element <id>                # Click by accessibility element ID (new)
-percept click --element <id> --action press # Use accessibility press action instead of mouse sim
+agent-desktop click --block <id>                  # Click by YOLO block ID (existing behavior)
+agent-desktop click --element <id>                # Click by accessibility element ID (new)
+agent-desktop click --element <id> --action press # Use accessibility press action instead of mouse sim
 ```
 
 When `--element` is used, the click can either:
@@ -567,7 +567,7 @@ pub struct PerceptState {
 }
 ```
 
-When `percept observe` runs, it saves accessibility state. When `percept screenshot` runs, it saves merged state (YOLO blocks + accessibility elements). The `click`/`type`/`scroll` commands check both block and element namespaces.
+When `agent-desktop observe` runs, it saves accessibility state. When `agent-desktop screenshot` runs, it saves merged state (YOLO blocks + accessibility elements). The `click`/`type`/`scroll` commands check both block and element namespaces.
 
 ---
 
@@ -577,7 +577,7 @@ When `percept observe` runs, it saves accessibility state. When `percept screens
 1. Define `AccessibilityElement`, `ElementRole`, `ElementStates`, `ElementBounds` in `types.rs`
 2. Define `AccessibilityProvider` trait in `platform/accessibility/mod.rs`
 3. Implement macOS provider using AXUIElement FFI
-4. Add `percept observe` command (macOS only initially)
+4. Add `agent-desktop observe` command (macOS only initially)
 5. Add state persistence for accessibility data
 
 ### Phase 2: Linux AT-SPI2 Implementation
@@ -592,13 +592,13 @@ When `percept observe` runs, it saves accessibility state. When `percept screens
 3. Add `platform/windows.rs` for input simulation (using `SendInput`)
 4. Handle COM initialization, DPI scaling
 
-### Phase 4: `percept interact` Command
+### Phase 4: `agent-desktop interact` Command
 1. Implement native accessibility actions per platform
-2. Add `percept interact` command with action dispatch
+2. Add `agent-desktop interact` command with action dispatch
 3. Support press, set-value, focus, toggle, expand/collapse, scroll, select
 
 ### Phase 5: Screenshot + Accessibility Merge
-1. Modify `percept screenshot` to query accessibility tree alongside YOLO
+1. Modify `agent-desktop screenshot` to query accessibility tree alongside YOLO
 2. Merge: match YOLO blocks to accessibility elements by bounding box overlap
 3. Annotate screenshot with accessibility labels (role + name) instead of just numeric IDs
 4. Output enriched JSON that includes both visual and semantic data
@@ -641,7 +641,7 @@ windows = { version = "0.58", features = ["Win32_UI_Accessibility", "Win32_Found
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
 | **Normalize vs raw** | Normalize + optional raw | Agents need consistent schema; power users can access raw |
-| **Primary command** | `percept observe` | Name is action-oriented, doesn't imply visual-only |
+| **Primary command** | `agent-desktop observe` | Name is action-oriented, doesn't imply visual-only |
 | **YOLO kept?** | Yes, as fallback/supplement | Some apps expose no accessibility; visual detection still useful |
 | **Native actions vs mouse sim** | Both available | Native actions are more reliable; mouse sim works universally |
 | **Default output** | JSON to stdout | Easy for agents to parse; pipe-friendly |
@@ -655,7 +655,7 @@ windows = { version = "0.58", features = ["Win32_UI_Accessibility", "Win32_Found
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│                      percept (single Rust binary)                      │
+│                      agent-desktop (single Rust binary)                      │
 │                                                                        │
 │  ┌──────────────┐  ┌──────────┐  ┌──────────────────────────────────┐ │
 │  │  Commands     │  │  State   │  │     Platform Layer               │ │
@@ -686,16 +686,16 @@ windows = { version = "0.58", features = ["Win32_UI_Accessibility", "Win32_Found
 │  │  YOLO v8 detection — used when accessibility is unavailable     │   │
 │  └─────────────────────────────────────────────────────────────────┘   │
 └────────────────────────────────────────────────────────────────────────┘
-        State: ~/.percept/state.json  (blocks + accessibility snapshot)
-        Models: ~/.percept/models/*.onnx
+        State: ~/.agent-desktop/state.json  (blocks + accessibility snapshot)
+        Models: ~/.agent-desktop/models/*.onnx
 ```
 
 ---
 
 ## Summary
 
-**Before**: percept = screenshot → YOLO inference → numbered blocks → mouse click at coordinates
-**After**: percept = query accessibility tree → structured elements with roles/names/actions → native interaction; screenshots available as enriched supplement
+**Before**: agent-desktop = screenshot → YOLO inference → numbered blocks → mouse click at coordinates
+**After**: agent-desktop = query accessibility tree → structured elements with roles/names/actions → native interaction; screenshots available as enriched supplement
 
 The accessibility-first approach gives agents:
 - **Semantic understanding**: "This is a button named 'Submit'" vs "Block 7 at (400,300)"

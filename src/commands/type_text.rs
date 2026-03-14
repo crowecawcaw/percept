@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 
 use crate::platform;
 use crate::platform::accessibility;
-use crate::state::PerceptState;
+use crate::state::AppState;
 
 pub fn run_type(element_id: Option<u32>, text: &str) -> Result<()> {
     // If element specified, try set-value first, fall back to click+type
@@ -15,7 +15,7 @@ pub fn run_type(element_id: Option<u32>, text: &str) -> Result<()> {
             }
             Err(_) => {
                 // Fall back: click element center, then type
-                let state = PerceptState::load()?;
+                let state = AppState::load()?;
                 let elem = state.get_element(eid)?;
                 if let Some(ref bounds) = elem.bounds {
                     let (x, y) = bounds.center();

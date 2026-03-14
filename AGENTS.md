@@ -1,4 +1,4 @@
-# percept — design tenets
+# agent-desktop — design tenets
 
 ## 1. Agent-first, human-debuggable
 
@@ -15,8 +15,8 @@ Human debugging should be *possible*, not *prioritized*.
 
 Agents may try things that aren't documented. Support reasonable variations rather than returning errors that force a specific invocation pattern:
 
-- Both `percept --help` and `percept help` work
-- Both `percept observe` (no args) and `percept observe --app <name>` work, with sensible defaults
+- Both `agent-desktop --help` and `agent-desktop help` work
+- Both `agent-desktop observe` (no args) and `agent-desktop observe --app <name>` work, with sensible defaults
 - Lightweight aliases are fine when the cost is low and the benefit is fewer agent failures
 
 Document the canonical workflow clearly. Support the rest silently.

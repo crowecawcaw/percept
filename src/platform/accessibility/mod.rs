@@ -95,14 +95,14 @@ pub fn get_tree(target: &AppTarget, opts: &QueryOptions) -> Result<Accessibility
 /// (DFS), so element IDs match the ones the user saw in the previous snapshot
 /// as long as the application UI hasn't changed.
 pub fn perform_action(element_id: u32, action: &str, value: Option<&str>) -> Result<()> {
-    let state = crate::state::PerceptState::load()?;
+    let state = crate::state::AppState::load()?;
     let snapshot = state.accessibility.as_ref().ok_or_else(|| {
-        anyhow::anyhow!("No accessibility data. Run `percept observe` first.")
+        anyhow::anyhow!("No accessibility data. Run `agent-desktop observe` first.")
     })?;
 
     if snapshot.pid == 0 {
         anyhow::bail!(
-            "Current state is an all-apps overview. Run `percept observe --app <name>` to target a specific app first."
+            "Current state is an all-apps overview. Run `agent-desktop observe --app <name>` to target a specific app first."
         );
     }
 

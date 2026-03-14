@@ -16,7 +16,7 @@ impl Platform {
         } else if cfg!(target_os = "macos") {
             Ok(Platform::MacOS)
         } else {
-            anyhow::bail!("Unsupported platform. percept supports Linux and macOS only.")
+            anyhow::bail!("Unsupported platform. agent-desktop supports Linux and macOS only.")
         }
     }
 }
