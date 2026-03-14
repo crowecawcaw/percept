@@ -65,10 +65,15 @@ jobs:
       - name: "Test: interact press on element"
         shell: pwsh
         run: |
+          # Observe first to populate state (--pid triggers focus which is stubbed)
           & ./target/debug/agent-desktop.exe observe --pid ${{ steps.notepad.outputs.PID }} 2>&1 | Out-Null
-          # Try pressing element 2 — allow failure but shouldn't panic
-          $output = & ./target/debug/agent-desktop.exe interact --pid ${{ steps.notepad.outputs.PID }} --element 2 --action press 2>&1 | Out-String
-          Write-Host $output
+          # Use interact without --pid (reads from saved state)
+          # Allow failure (element may not support Invoke) but verify it doesn't panic
+          $output = & ./target/debug/agent-desktop.exe interact --element 2 --action press 2>&1 | Out-String
+          Write-Host "Interact output: $output"
+          Write-Host "Exit code: $LASTEXITCODE"
+          # Success or graceful error — just not a crash/panic
+          if ($output -match 'panic') { throw "interact panicked" }
 
       # --- Tests for stubbed commands (should fail gracefully) ---
 
