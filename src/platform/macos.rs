@@ -362,3 +362,13 @@ end tell"#,
     }
     Ok(())
 }
+
+pub fn read_clipboard() -> Result<String> {
+    let output = Command::new("pbpaste")
+        .output()
+        .context("Failed to read clipboard via pbpaste")?;
+    if !output.status.success() {
+        anyhow::bail!("pbpaste failed");
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}

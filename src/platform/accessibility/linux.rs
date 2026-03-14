@@ -28,6 +28,7 @@ impl LinuxAccessibilityProvider {
     }
 
     fn get_screen_size() -> (u32, u32) {
+        // Try X11 first
         if let Ok(output) = std::process::Command::new("xdpyinfo").output() {
             let stdout = String::from_utf8_lossy(&output.stdout);
             for line in stdout.lines() {
@@ -42,11 +43,54 @@ impl LinuxAccessibilityProvider {
                 }
             }
         }
+        // Try Wayland (swaymsg)
+        if let Ok(output) = std::process::Command::new("swaymsg")
+            .args(["-t", "get_outputs", "--raw"])
+            .output()
+        {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if let Ok(outputs) = serde_json::from_str::<serde_json::Value>(&stdout) {
+                if let Some(arr) = outputs.as_array() {
+                    for out in arr {
+                        if out.get("active").and_then(|v| v.as_bool()) == Some(true) {
+                            if let Some(rect) = out.get("rect") {
+                                let w = rect.get("width").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                                let h = rect.get("height").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                                if w > 0 && h > 0 {
+                                    return (w, h);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Try wlr-randr
+        if let Ok(output) = std::process::Command::new("wlr-randr").output() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines() {
+                let trimmed = line.trim();
+                if trimmed.contains("current") && trimmed.contains(" x ") {
+                    // Format: "  1920 x 1080 px, ... (current)"
+                    let parts: Vec<&str> = trimmed.split_whitespace().collect();
+                    if parts.len() >= 3 {
+                        if let (Ok(w), Ok(h)) = (parts[0].parse(), parts[2].parse()) {
+                            return (w, h);
+                        }
+                    }
+                }
+            }
+        }
         (1920, 1080)
     }
 }
 
 impl super::AccessibilityProvider for LinuxAccessibilityProvider {
+    fn get_all_apps_tree(&self, opts: &QueryOptions) -> Result<AccessibilitySnapshot> {
+        let rt = tokio::runtime::Runtime::new()?;
+        rt.block_on(get_all_apps_tree_async(opts, &self.element_cache))
+    }
+
     fn get_app_tree(&self, app: &AppTarget, opts: &QueryOptions) -> Result<AccessibilitySnapshot> {
         let rt = tokio::runtime::Runtime::new()?;
         rt.block_on(get_app_tree_async(app, opts, &self.element_cache))
@@ -96,6 +140,85 @@ impl super::AccessibilityProvider for LinuxAccessibilityProvider {
             }
         })
     }
+}
+
+async fn get_all_apps_tree_async(
+    opts: &QueryOptions,
+    cache: &Mutex<HashMap<u32, CachedElement>>,
+) -> Result<AccessibilitySnapshot> {
+    let a11y = AccessibilityConnection::new()
+        .await
+        .context("Failed to connect to AT-SPI2 accessibility bus")?;
+    let conn = a11y.connection();
+
+    let registry = AccessibleProxy::builder(conn)
+        .destination("org.a11y.atspi.Registry")?
+        .path("/org/a11y/atspi/accessible/root")?
+        .build()
+        .await?;
+
+    let children = registry.get_children().await?;
+    let (screen_w, screen_h) = LinuxAccessibilityProvider::get_screen_size();
+
+    let mut elements = Vec::new();
+    let mut id_counter = 0u32;
+    let mut cache_guard = cache.lock().unwrap();
+    cache_guard.clear();
+
+    for child_ref in &children {
+        if elements.len() >= opts.max_elements as usize {
+            break;
+        }
+        let bus = child_ref.name.as_str();
+        let path = child_ref.path.as_str();
+
+        let app_name = if let Ok(proxy) = AccessibleProxy::builder(conn)
+            .destination(bus)?
+            .path(path)?
+            .build()
+            .await
+        {
+            proxy.name().await.unwrap_or_default()
+        } else {
+            continue;
+        };
+
+        if app_name.is_empty() {
+            continue;
+        }
+
+        traverse_tree(
+            conn,
+            bus,
+            path,
+            opts,
+            &mut elements,
+            &mut id_counter,
+            0,
+            None,
+            screen_w,
+            screen_h,
+            &app_name,
+            &mut cache_guard,
+        )
+        .await?;
+    }
+
+    let element_count = elements.len();
+    Ok(AccessibilitySnapshot {
+        app_name: "all".to_string(),
+        pid: 0,
+        screen_width: screen_w,
+        screen_height: screen_h,
+        element_count,
+        elements,
+        query_max_depth: opts.max_depth,
+        query_max_elements: opts.max_elements,
+        query_visible_only: opts.visible_only,
+        query_roles: opts.roles.as_ref()
+            .map(|r| r.iter().map(|role| role.display_name().to_string()).collect())
+            .unwrap_or_default(),
+    })
 }
 
 async fn get_app_tree_async(

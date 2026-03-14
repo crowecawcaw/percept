@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 use crate::state::AppState;
 
@@ -28,16 +28,8 @@ pub fn run_read_element(element_id: u32) -> Result<()> {
 
 /// Read clipboard contents
 pub fn run_read_clipboard() -> Result<()> {
-    let output = std::process::Command::new("pbpaste")
-        .output()
-        .context("Failed to read clipboard. Is pbpaste available?")?;
-
-    if !output.status.success() {
-        anyhow::bail!("pbpaste failed");
-    }
-
-    let text = String::from_utf8_lossy(&output.stdout);
-    let result = serde_json::json!({ "clipboard": text.as_ref() });
+    let text = crate::platform::read_clipboard()?;
+    let result = serde_json::json!({ "clipboard": text });
     let json = serde_json::to_string_pretty(&result)?;
     println!("{}", json);
     Ok(())
