@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use crate::inference::InferenceEngine;
 use crate::state::PerceptState;
-use crate::types::{AnnotationResult, Block};
+use crate::types::{AccessibilityElement, AnnotationResult, Block};
 
 // Color palette for annotation boxes
 const COLORS: &[(u8, u8, u8)] = &[
@@ -82,11 +82,11 @@ pub fn render_annotations(
         let (r, g, b) = COLORS[color_idx];
         let color = Rgb([r, g, b]);
 
-        // Convert normalized coordinates to pixel coordinates
-        let x1 = (block.bbox.x1 * img_w as f64) as i32;
-        let y1 = (block.bbox.y1 * img_h as f64) as i32;
-        let x2 = (block.bbox.x2 * img_w as f64) as i32;
-        let y2 = (block.bbox.y2 * img_h as f64) as i32;
+        // Convert normalized coordinates to pixel coordinates, clamped to image bounds.
+        let x1 = ((block.bbox.x1 * img_w as f64) as i32).clamp(0, img_w as i32);
+        let y1 = ((block.bbox.y1 * img_h as f64) as i32).clamp(0, img_h as i32);
+        let x2 = ((block.bbox.x2 * img_w as f64) as i32).clamp(0, img_w as i32);
+        let y2 = ((block.bbox.y2 * img_h as f64) as i32).clamp(0, img_h as i32);
         let w = (x2 - x1).max(1);
         let h = (y2 - y1).max(1);
 
@@ -122,6 +122,98 @@ pub fn render_annotations(
         image::ColorType::Rgb8,
     )
     .context("Failed to save annotated image")?;
+
+    Ok(output_path.to_path_buf())
+}
+
+// Accessibility-specific annotation colors (distinct from YOLO palette)
+const A11Y_COLORS: &[(u8, u8, u8)] = &[
+    (64, 224, 208),  // turquoise
+    (100, 149, 237), // cornflower blue
+    (144, 238, 144), // light green
+    (255, 182, 193), // light pink
+    (255, 218, 185), // peach
+    (221, 160, 221), // plum
+    (176, 196, 222), // light steel blue
+    (240, 230, 140), // khaki
+];
+
+/// Render accessibility element annotations on top of an image
+pub fn render_accessibility_annotations(
+    img: &DynamicImage,
+    elements: &[AccessibilityElement],
+    output_path: &Path,
+) -> Result<PathBuf> {
+    let mut canvas = img.to_rgb8();
+    let (img_w, img_h) = (canvas.width(), canvas.height());
+
+    let font_data = include_bytes!("../../assets/DejaVuSans.ttf");
+    let font = FontRef::try_from_slice(font_data).unwrap();
+    let font_scale = PxScale::from(12.0);
+
+    for elem in elements {
+        let bbox = match &elem.bbox {
+            Some(b) => b,
+            None => continue,
+        };
+
+        let color_idx = ((elem.id - 1) as usize) % A11Y_COLORS.len();
+        let (r, g, b) = A11Y_COLORS[color_idx];
+        let color = Rgb([r, g, b]);
+
+        let x1 = ((bbox.x1 * img_w as f64) as i32).clamp(0, img_w as i32);
+        let y1 = ((bbox.y1 * img_h as f64) as i32).clamp(0, img_h as i32);
+        let x2 = ((bbox.x2 * img_w as f64) as i32).clamp(0, img_w as i32);
+        let y2 = ((bbox.y2 * img_h as f64) as i32).clamp(0, img_h as i32);
+        let w = (x2 - x1).max(1);
+        let h = (y2 - y1).max(1);
+
+        // Draw a dashed-style box (1px, to distinguish from YOLO's 2px solid)
+        if w > 0 && h > 0 {
+            let rect = Rect::at(x1, y1).of_size(w as u32, h as u32);
+            draw_hollow_rect_mut(&mut canvas, rect, color);
+        }
+
+        // Build label: "[id] role name"
+        let mut label = format!("[{}] {}", elem.id, elem.role_name);
+        if let Some(ref name) = elem.name {
+            let truncated = if name.len() > 20 {
+                format!("{}...", &name[..17])
+            } else {
+                name.clone()
+            };
+            label.push_str(&format!(" \"{}\"", truncated));
+        }
+
+        let label_w = (label.len() as i32 * 7 + 4).max(20);
+        let label_h = 16;
+        let label_x = x1;
+        let label_y = (y2).min(img_h as i32 - label_h); // Below the box
+
+        if label_x >= 0 && label_y >= 0 {
+            let bg_rect =
+                Rect::at(label_x, label_y).of_size(label_w as u32, label_h as u32);
+            draw_filled_rect_mut(&mut canvas, bg_rect, color);
+            draw_text_mut(
+                &mut canvas,
+                Rgb([0, 0, 0]),
+                label_x + 2,
+                label_y + 1,
+                font_scale,
+                &font,
+                &label,
+            );
+        }
+    }
+
+    image::save_buffer(
+        output_path,
+        &canvas,
+        img_w,
+        img_h,
+        image::ColorType::Rgb8,
+    )
+    .context("Failed to save accessibility-annotated image")?;
 
     Ok(output_path.to_path_buf())
 }

@@ -452,22 +452,24 @@ fn test_full_workflow_state_persistence() {
         assert!(cy >= 0 && cy < 1080, "Block {} center y out of image", id);
     }
 
-    // Step 3: Try running click on block 2 ("Edit" menu)
-    // Will fail at platform level (no xdotool) but should parse correctly
-    let result = assert_cmd::Command::cargo_bin("percept")
+    // Step 3: Try running click on block 2 ("Edit" menu).
+    // On Linux it fails (no xdotool); on macOS it succeeds (osascript).
+    let cmd = assert_cmd::Command::cargo_bin("percept")
         .unwrap()
         .args(["click", "--block", "2"])
         .env("HOME", tmp.path())
         .env("XDG_DATA_HOME", tmp.path())
-        .assert()
-        .failure();
+        .assert();
 
-    // Failed at platform, not at state lookup
-    result.stderr(
+    #[cfg(target_os = "linux")]
+    cmd.failure().stderr(
         predicate::str::contains("xdotool")
             .or(predicate::str::contains("click"))
             .or(predicate::str::contains("mouse")),
     );
+    #[cfg(target_os = "macos")]
+    cmd.success()
+        .stdout(predicate::str::contains("Clicked block 2"));
 
     // Step 4: Update state (simulate re-annotation after clicking)
     let updated_state = serde_json::json!({

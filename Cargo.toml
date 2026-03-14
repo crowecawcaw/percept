@@ -22,6 +22,24 @@ sha2 = "0.10"
 anyhow = "1"
 futures-util = "0.3"
 
+# Linux AT-SPI2 accessibility
+[target.'cfg(target_os = "linux")'.dependencies]
+atspi = "0.22"
+zbus = "4"
+
+# macOS accessibility (core-foundation for FFI helpers)
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = "0.10"
+
+# Windows UI Automation
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.58", features = [
+    "Win32_UI_Accessibility",
+    "Win32_Foundation",
+    "Win32_System_Com",
+    "Win32_System_Ole",
+] }
+
 [dev-dependencies]
 assert_cmd = "2"
 predicates = "3"

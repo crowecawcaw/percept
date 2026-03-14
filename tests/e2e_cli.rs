@@ -27,7 +27,7 @@ fn test_help_output() {
         .arg("--help")
         .assert()
         .success()
-        .stdout(predicate::str::contains("annotates screenshots"))
+        .stdout(predicate::str::contains("accessibility APIs"))
         .stdout(predicate::str::contains("screenshot"))
         .stdout(predicate::str::contains("click"))
         .stdout(predicate::str::contains("type"))
@@ -36,11 +36,13 @@ fn test_help_output() {
 }
 
 #[test]
-fn test_version_output() {
+fn test_version_in_help() {
+    // Version is shown in the description, not a separate --version flag
     percept_cmd()
-        .arg("--version")
+        .arg("--help")
         .assert()
         .success()
+        .stdout(predicate::str::contains("v0."))
         .stdout(predicate::str::contains("percept"));
 }
 
@@ -226,20 +228,22 @@ fn test_click_with_prepopulated_state() {
 
     fs::write(data_dir.join("state.json"), state.to_string()).unwrap();
 
-    // Click should resolve the block but fail on platform tool (xdotool)
-    let result = percept_cmd()
+    // Click resolves the block — on Linux it fails (no xdotool), on macOS it succeeds (osascript).
+    let cmd = percept_cmd()
         .args(["click", "--block", "1"])
         .env("HOME", tmp.path())
         .env("XDG_DATA_HOME", tmp.path())
-        .assert()
-        .failure();
+        .assert();
 
-    // It should fail at the platform level (xdotool not found), not at state lookup
-    result.stderr(
+    #[cfg(target_os = "linux")]
+    cmd.failure().stderr(
         predicate::str::contains("xdotool")
             .or(predicate::str::contains("click"))
             .or(predicate::str::contains("move mouse")),
     );
+    #[cfg(target_os = "macos")]
+    cmd.success()
+        .stdout(predicate::str::contains("Clicked block 1"));
 }
 
 #[test]
@@ -294,19 +298,22 @@ fn test_type_with_block_resolves_state() {
 
     fs::write(data_dir.join("state.json"), state.to_string()).unwrap();
 
-    // Should fail at xdotool, not at state lookup
-    let result = percept_cmd()
+    // Type resolves the block — on Linux it fails (no xdotool), on macOS it succeeds (osascript).
+    let cmd = percept_cmd()
         .args(["type", "--block", "1", "--text", "hello world"])
         .env("HOME", tmp.path())
         .env("XDG_DATA_HOME", tmp.path())
-        .assert()
-        .failure();
+        .assert();
 
-    result.stderr(
+    #[cfg(target_os = "linux")]
+    cmd.failure().stderr(
         predicate::str::contains("xdotool")
             .or(predicate::str::contains("click"))
             .or(predicate::str::contains("type")),
     );
+    #[cfg(target_os = "macos")]
+    cmd.success()
+        .stdout(predicate::str::contains("Typed"));
 }
 
 #[test]
@@ -366,19 +373,21 @@ fn test_click_with_offset() {
 
     fs::write(data_dir.join("state.json"), state.to_string()).unwrap();
 
-    // Click with offset should parse correctly
-    let result = percept_cmd()
+    // Click with offset — on Linux it fails (no xdotool), on macOS it succeeds (osascript).
+    let cmd = percept_cmd()
         .args(["click", "--block", "1", "--offset", "10,20"])
         .env("HOME", tmp.path())
         .env("XDG_DATA_HOME", tmp.path())
-        .assert()
-        .failure();
+        .assert();
 
-    // Should fail at platform level, not at parsing
-    result.stderr(
+    #[cfg(target_os = "linux")]
+    cmd.failure().stderr(
         predicate::str::contains("xdotool")
             .or(predicate::str::contains("click")),
     );
+    #[cfg(target_os = "macos")]
+    cmd.success()
+        .stdout(predicate::str::contains("Clicked block 1"));
 }
 
 #[test]
