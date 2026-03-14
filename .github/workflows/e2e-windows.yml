@@ -74,6 +74,7 @@ jobs:
           Write-Host "Exit code: $LASTEXITCODE"
           # Success or graceful error — just not a crash/panic
           if ($output -match 'panic') { throw "interact panicked" }
+          exit 0
 
       # --- Tests for stubbed commands (should fail gracefully) ---
 
