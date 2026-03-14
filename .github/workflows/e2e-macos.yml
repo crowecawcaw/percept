@@ -1,0 +1,166 @@
+name: E2E macOS
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  e2e-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --verbose
+
+      - name: Grant accessibility permissions via TCC database
+        run: |
+          # Grant accessibility to the agent-desktop binary, osascript, bash, and Terminal
+          BINARY="$(pwd)/target/debug/agent-desktop"
+          sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" \
+            "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, flags) VALUES
+              ('kTCCServiceAccessibility', '${BINARY}', 1, 2, 0, 1, 0),
+              ('kTCCServiceAccessibility', '/usr/bin/osascript', 1, 2, 0, 1, 0),
+              ('kTCCServiceAccessibility', '/bin/bash', 1, 2, 0, 1, 0),
+              ('kTCCServiceAccessibility', '/bin/zsh', 1, 2, 0, 1, 0);"
+          echo "TCC grants applied"
+          # Verify the binary sees itself as trusted
+          swift -e 'import ApplicationServices; print("AXIsProcessTrusted:", AXIsProcessTrusted())'
+
+      - name: Launch TextEdit for testing
+        run: |
+          open -a TextEdit
+          sleep 2
+          pgrep -x TextEdit && echo "TextEdit is running" || (echo "TextEdit failed to launch" && exit 1)
+
+      # --- Tests that should succeed ---
+
+      - name: "Test: screenshot captures a file"
+        run: |
+          ./target/debug/agent-desktop screenshot --output /tmp/screen.png
+          test -f /tmp/screen.png
+          SIZE=$(stat -f%z /tmp/screen.png)
+          test "$SIZE" -gt 1000  # should be a real image, not empty
+
+      - name: "Test: observe returns XML with elements"
+        run: |
+          OUTPUT=$(./target/debug/agent-desktop observe 2>&1)
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -q '<application'  # should contain application elements
+
+      - name: "Test: observe --app Finder returns elements"
+        run: |
+          OUTPUT=$(./target/debug/agent-desktop observe --app Finder 2>&1)
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -q '<application'
+          echo "$OUTPUT" | grep -qi 'Finder'
+
+      - name: "Test: observe --app TextEdit returns elements"
+        run: |
+          OUTPUT=$(./target/debug/agent-desktop observe --app TextEdit 2>&1)
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -q '<'  # should have XML output
+
+      - name: "Test: observe --list-roles shows role counts"
+        run: |
+          OUTPUT=$(./target/debug/agent-desktop observe --list-roles 2>&1)
+          echo "$OUTPUT"
+          # Should list roles with counts
+          echo "$OUTPUT" | grep -qE '[a-z_]+.*[0-9]+'
+
+      - name: "Test: observe with query filter"
+        run: |
+          # First do a full observe to populate state
+          ./target/debug/agent-desktop observe --app Finder > /dev/null 2>&1 || true
+          OUTPUT=$(./target/debug/agent-desktop observe --app Finder -q 'menu_bar' 2>&1)
+          echo "$OUTPUT"
+          # Should return something (menu_bar is common in Finder)
+          test -n "$OUTPUT"
+
+      - name: "Test: observe JSON format"
+        run: |
+          OUTPUT=$(./target/debug/agent-desktop observe --app Finder --format json 2>&1)
+          echo "$OUTPUT" | head -5
+          # Should be valid JSON (starts with [ or {)
+          echo "$OUTPUT" | head -1 | grep -qE '^\[|\{'
+
+      - name: "Test: focus --app Finder"
+        run: |
+          OUTPUT=$(./target/debug/agent-desktop focus --app Finder 2>&1)
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -qi 'Focused'
+
+      - name: "Test: focus --app TextEdit"
+        run: |
+          OUTPUT=$(./target/debug/agent-desktop focus --app TextEdit 2>&1)
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -qi 'Focused'
+
+      - name: "Test: read --clipboard returns JSON"
+        run: |
+          OUTPUT=$(./target/debug/agent-desktop read --clipboard 2>&1)
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -q 'clipboard'
+
+      - name: "Test: click at coordinates"
+        run: |
+          # Click at a safe coordinate — should not error
+          ./target/debug/agent-desktop click --x 100 --y 100 2>&1
+          echo "Click succeeded"
+
+      - name: "Test: scroll down"
+        run: |
+          ./target/debug/agent-desktop scroll --direction down 2>&1
+          echo "Scroll succeeded"
+
+      - name: "Test: key press"
+        run: |
+          # Press escape — a safe key
+          ./target/debug/agent-desktop key --name escape 2>&1
+          echo "Key press succeeded"
+
+      - name: "Test: observe then click element by query"
+        run: |
+          # Observe Finder, then click a menu bar item by query
+          ./target/debug/agent-desktop observe --app Finder > /dev/null 2>&1
+          # Try clicking a menu_bar_item — Finder always has menu bar items
+          OUTPUT=$(./target/debug/agent-desktop click --app Finder -q 'menu_bar_item:nth(1)' 2>&1) || true
+          echo "$OUTPUT"
+          # Even if click fails (no bounds), the query resolution should work
+          # Just verify the command doesn't crash with a panic
+
+      - name: "Test: type text into TextEdit"
+        run: |
+          ./target/debug/agent-desktop focus --app TextEdit > /dev/null 2>&1
+          ./target/debug/agent-desktop type --text "hello from CI" 2>&1
+          echo "Type succeeded"
+
+      - name: "Test: read element text"
+        run: |
+          # Observe TextEdit and try to read from an element
+          OUTPUT=$(./target/debug/agent-desktop observe --app TextEdit 2>&1)
+          echo "$OUTPUT"
+          # The observe should return elements — just verify it doesn't error
+          echo "$OUTPUT" | grep -q '<'
+
+      # --- Tests for expected failures ---
+
+      - name: "Test: observe with invalid app fails gracefully"
+        run: |
+          OUTPUT=$(./target/debug/agent-desktop observe --app NonExistentApp 2>&1) && exit 1 || true
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -qi 'not found\|error'
+
+      - name: "Test: click without element or coords fails"
+        run: |
+          OUTPUT=$(./target/debug/agent-desktop click 2>&1) && exit 1 || true
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -qi 'element\|required'

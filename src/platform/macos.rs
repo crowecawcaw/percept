@@ -340,20 +340,21 @@ end tell"#,
 
 pub fn scroll(direction: &str, amount: u32) -> Result<()> {
     let (dx, dy) = match direction {
-        "up" => (0, amount as i32),
-        "down" => (0, -(amount as i32)),
-        "left" => (amount as i32, 0),
-        "right" => (-(amount as i32), 0),
+        "up" => (0i32, amount as i32),
+        "down" => (0i32, -(amount as i32)),
+        "left" => (-(amount as i32), 0i32),
+        "right" => (amount as i32, 0i32),
         _ => anyhow::bail!("Invalid scroll direction: {}", direction),
     };
+    // Use JXA to create CGEvent scroll wheel events
     let script = format!(
-        r#"tell application "System Events"
-    scroll {{0, 0}} by {{{}, {}}}
-end tell"#,
-        dx, dy
+        r#"ObjC.import('CoreGraphics');
+var event = $.CGEventCreateScrollWheelEvent(null, 1, 2, {}, {});
+$.CGEventPost($.kCGHIDEventTap, event);"#,
+        dy, dx
     );
     let output = Command::new("osascript")
-        .args(["-e", &script])
+        .args(["-l", "JavaScript", "-e", &script])
         .output()
         .context("Failed to run osascript for scroll")?;
     if !output.status.success() {
