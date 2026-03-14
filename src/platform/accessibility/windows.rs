@@ -1,10 +1,9 @@
 use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::sync::Mutex;
-use windows::core::{BSTR, Interface};
+use windows::core::{BSTR, Interface, VARIANT};
 use windows::Win32::Foundation::*;
 use windows::Win32::System::Com::*;
-use windows::Win32::System::Variant::VARIANT;
 use windows::Win32::UI::Accessibility::*;
 
 use crate::types::*;
