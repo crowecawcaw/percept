@@ -9,6 +9,12 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 #[command(name = "percept")]
 #[command(about = concat!("v", env!("CARGO_PKG_VERSION"), " — CLI tool for AI agents to observe and interact with desktop UIs via accessibility APIs"))]
+#[command(long_about = concat!("v", env!("CARGO_PKG_VERSION"), " — CLI tool for AI agents to observe and interact with desktop UIs via accessibility APIs
+
+  percept observe
+  percept observe --app Safari
+  percept click --app Safari --label \"Address and Search Bar\"
+  percept type --text \"https://example.com\""))]
 #[command(disable_version_flag = true)]
 struct Cli {
     #[command(subcommand)]
