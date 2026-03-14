@@ -1,0 +1,162 @@
+name: E2E Windows
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  e2e-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --verbose
+
+      - name: Launch Notepad and save PID
+        id: notepad
+        shell: pwsh
+        run: |
+          Start-Process notepad
+          Start-Sleep -Seconds 2
+          $proc = Get-Process notepad -ErrorAction SilentlyContinue | Select-Object -First 1
+          Write-Host "Notepad PID: $($proc.Id), Title: $($proc.MainWindowTitle)"
+          echo "PID=$($proc.Id)" >> $env:GITHUB_OUTPUT
+
+      # --- Accessibility tests (observe/interact — fully implemented) ---
+
+      - name: "Test: observe --pid returns elements"
+        shell: pwsh
+        run: |
+          $output = & ./target/debug/agent-desktop.exe observe --pid ${{ steps.notepad.outputs.PID }} 2>&1 | Out-String
+          Write-Host $output
+          if ($output -notmatch '<') { throw "Expected XML output" }
+
+      - name: "Test: observe --pid --format json"
+        shell: pwsh
+        run: |
+          $output = & ./target/debug/agent-desktop.exe observe --pid ${{ steps.notepad.outputs.PID }} --format json 2>&1 | Out-String
+          Write-Host ($output.Substring(0, [Math]::Min(500, $output.Length)))
+          if ($output -notmatch '[\[\{]') { throw "Expected JSON output" }
+
+      - name: "Test: observe --pid --list-roles"
+        shell: pwsh
+        run: |
+          $output = & ./target/debug/agent-desktop.exe observe --pid ${{ steps.notepad.outputs.PID }} --list-roles 2>&1 | Out-String
+          Write-Host $output
+          if ($output -notmatch '\d+') { throw "Expected role counts" }
+
+      - name: "Test: observe --pid with query"
+        shell: pwsh
+        run: |
+          & ./target/debug/agent-desktop.exe observe --pid ${{ steps.notepad.outputs.PID }} 2>&1 | Out-Null
+          $output = & ./target/debug/agent-desktop.exe observe --pid ${{ steps.notepad.outputs.PID }} -q 'window' 2>&1 | Out-String
+          Write-Host $output
+          if ($output.Length -eq 0) { throw "Expected non-empty query result" }
+
+      - name: "Test: interact press on element"
+        shell: pwsh
+        run: |
+          # Observe first to populate state (--pid triggers focus which is stubbed)
+          & ./target/debug/agent-desktop.exe observe --pid ${{ steps.notepad.outputs.PID }} 2>&1 | Out-Null
+          # Use interact without --pid (reads from saved state)
+          # Allow failure (element may not support Invoke) but verify it doesn't panic
+          $output = & ./target/debug/agent-desktop.exe interact --element 2 --action press 2>&1 | Out-String
+          Write-Host "Interact output: $output"
+          Write-Host "Exit code: $LASTEXITCODE"
+          # Success or graceful error — just not a crash/panic
+          if ($output -match 'panic') { throw "interact panicked" }
+          exit 0
+
+      # --- Tests for stubbed commands (should fail gracefully) ---
+
+      - name: "Test: screenshot fails gracefully on Windows"
+        shell: pwsh
+        run: |
+          $output = & ./target/debug/agent-desktop.exe screenshot --output C:\Temp\screen.png 2>&1 | Out-String
+          Write-Host $output
+          if ($LASTEXITCODE -eq 0) { throw "Expected screenshot to fail on Windows" }
+          if ($output -notmatch 'not supported') { throw "Expected 'not supported' message" }
+
+      - name: "Test: click at coordinates fails gracefully"
+        shell: pwsh
+        run: |
+          $output = & ./target/debug/agent-desktop.exe click --x 100 --y 100 2>&1 | Out-String
+          Write-Host $output
+          if ($LASTEXITCODE -eq 0) { throw "Expected click to fail on Windows" }
+          if ($output -notmatch 'not supported') { throw "Expected 'not supported' message" }
+
+      - name: "Test: scroll fails gracefully"
+        shell: pwsh
+        run: |
+          $output = & ./target/debug/agent-desktop.exe scroll --direction down 2>&1 | Out-String
+          Write-Host $output
+          if ($LASTEXITCODE -eq 0) { throw "Expected scroll to fail on Windows" }
+          if ($output -notmatch 'not supported') { throw "Expected 'not supported' message" }
+
+      - name: "Test: key press fails gracefully"
+        shell: pwsh
+        run: |
+          $output = & ./target/debug/agent-desktop.exe key --name escape 2>&1 | Out-String
+          Write-Host $output
+          if ($LASTEXITCODE -eq 0) { throw "Expected key to fail on Windows" }
+          if ($output -notmatch 'not supported') { throw "Expected 'not supported' message" }
+
+      - name: "Test: type fails gracefully"
+        shell: pwsh
+        run: |
+          $output = & ./target/debug/agent-desktop.exe type --text "hello" 2>&1 | Out-String
+          Write-Host $output
+          if ($LASTEXITCODE -eq 0) { throw "Expected type to fail on Windows" }
+          if ($output -notmatch 'not supported') { throw "Expected 'not supported' message" }
+
+      - name: "Test: read clipboard fails gracefully"
+        shell: pwsh
+        run: |
+          $output = & ./target/debug/agent-desktop.exe read --clipboard 2>&1 | Out-String
+          Write-Host $output
+          if ($LASTEXITCODE -eq 0) { throw "Expected read clipboard to fail on Windows" }
+          if ($output -notmatch 'not supported') { throw "Expected 'not supported' message" }
+
+      - name: "Test: focus fails gracefully"
+        shell: pwsh
+        run: |
+          $output = & ./target/debug/agent-desktop.exe focus --app Notepad 2>&1 | Out-String
+          Write-Host $output
+          if ($LASTEXITCODE -eq 0) { throw "Expected focus to fail on Windows" }
+          if ($output -notmatch 'not supported') { throw "Expected 'not supported' message" }
+
+      # --- Observe without --app (not implemented for Windows) ---
+
+      - name: "Test: observe without --app fails gracefully"
+        shell: pwsh
+        run: |
+          $output = & ./target/debug/agent-desktop.exe observe 2>&1 | Out-String
+          Write-Host $output
+          if ($LASTEXITCODE -eq 0) { throw "Expected observe without --app to fail" }
+          if ($output -notmatch 'not.*supported|error') { throw "Expected informative error" }
+
+      # --- CLI validation tests ---
+
+      - name: "Test: observe with invalid app fails gracefully"
+        shell: pwsh
+        run: |
+          $output = & ./target/debug/agent-desktop.exe observe --app NonExistentApp12345 2>&1 | Out-String
+          Write-Host $output
+          if ($LASTEXITCODE -eq 0) { throw "Expected failure for nonexistent app" }
+          if ($output -notmatch 'not found|error') { throw "Expected informative error" }
+
+      - name: "Test: click without element or coords fails"
+        shell: pwsh
+        run: |
+          $output = & ./target/debug/agent-desktop.exe click 2>&1 | Out-String
+          Write-Host $output
+          if ($LASTEXITCODE -eq 0) { throw "Expected failure" }
