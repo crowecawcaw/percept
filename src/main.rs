@@ -17,7 +17,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Query the accessibility tree. Without --app/--pid shows all apps at depth 1 (overview). With --app/--pid shows full tree for that app.
+    /// Query the accessibility tree.
     Observe {
         /// Target application by name (shows full tree)
         #[arg(long)]
