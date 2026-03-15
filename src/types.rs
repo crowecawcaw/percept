@@ -234,7 +234,7 @@ pub struct AccessibilitySnapshot {
 }
 
 fn default_query_max_depth() -> u32 { 10 }
-fn default_query_max_elements() -> u32 { 500 }
+fn default_query_max_elements() -> u32 { 100 }
 fn default_query_visible_only() -> bool { true }
 
 /// Options for querying the accessibility tree
@@ -251,7 +251,7 @@ impl Default for QueryOptions {
     fn default() -> Self {
         Self {
             max_depth: 10,
-            max_elements: 500,
+            max_elements: 100,
             visible_only: true,
             roles: None,
             include_raw: false,

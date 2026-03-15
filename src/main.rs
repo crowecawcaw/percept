@@ -40,8 +40,8 @@ enum Commands {
         #[arg(long)]
         max_depth: Option<u32>,
 
-        /// Maximum number of elements to return (default: 500)
-        #[arg(long, default_value = "500")]
+        /// Maximum number of elements to return (default: 100)
+        #[arg(long, default_value = "100")]
         max_elements: u32,
 
         /// Filter elements by role (comma-separated, e.g. "button,text_field")
