@@ -81,6 +81,7 @@ jobs:
       - name: "Test: screenshot fails gracefully on Windows"
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Continue'
           $output = & ./target/debug/agent-desktop.exe screenshot --output C:\Temp\screen.png 2>&1 | Out-String
           Write-Host $output
           if ($LASTEXITCODE -eq 0) { throw "Expected screenshot to fail on Windows" }
@@ -89,6 +90,7 @@ jobs:
       - name: "Test: click at coordinates fails gracefully"
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Continue'
           $output = & ./target/debug/agent-desktop.exe click --x 100 --y 100 2>&1 | Out-String
           Write-Host $output
           if ($LASTEXITCODE -eq 0) { throw "Expected click to fail on Windows" }
@@ -97,6 +99,7 @@ jobs:
       - name: "Test: scroll fails gracefully"
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Continue'
           $output = & ./target/debug/agent-desktop.exe scroll --direction down 2>&1 | Out-String
           Write-Host $output
           if ($LASTEXITCODE -eq 0) { throw "Expected scroll to fail on Windows" }
@@ -105,6 +108,7 @@ jobs:
       - name: "Test: key press fails gracefully"
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Continue'
           $output = & ./target/debug/agent-desktop.exe key --name escape 2>&1 | Out-String
           Write-Host $output
           if ($LASTEXITCODE -eq 0) { throw "Expected key to fail on Windows" }
@@ -113,6 +117,7 @@ jobs:
       - name: "Test: type fails gracefully"
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Continue'
           $output = & ./target/debug/agent-desktop.exe type --text "hello" 2>&1 | Out-String
           Write-Host $output
           if ($LASTEXITCODE -eq 0) { throw "Expected type to fail on Windows" }
@@ -121,6 +126,7 @@ jobs:
       - name: "Test: read clipboard fails gracefully"
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Continue'
           $output = & ./target/debug/agent-desktop.exe read --clipboard 2>&1 | Out-String
           Write-Host $output
           if ($LASTEXITCODE -eq 0) { throw "Expected read clipboard to fail on Windows" }
@@ -129,6 +135,7 @@ jobs:
       - name: "Test: focus fails gracefully"
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Continue'
           $output = & ./target/debug/agent-desktop.exe focus --app Notepad 2>&1 | Out-String
           Write-Host $output
           if ($LASTEXITCODE -eq 0) { throw "Expected focus to fail on Windows" }
@@ -139,6 +146,7 @@ jobs:
       - name: "Test: observe without --app fails gracefully"
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Continue'
           $output = & ./target/debug/agent-desktop.exe observe 2>&1 | Out-String
           Write-Host $output
           if ($LASTEXITCODE -eq 0) { throw "Expected observe without --app to fail" }
@@ -149,6 +157,7 @@ jobs:
       - name: "Test: observe with invalid app fails gracefully"
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Continue'
           $output = & ./target/debug/agent-desktop.exe observe --app NonExistentApp12345 2>&1 | Out-String
           Write-Host $output
           if ($LASTEXITCODE -eq 0) { throw "Expected failure for nonexistent app" }
@@ -157,6 +166,7 @@ jobs:
       - name: "Test: click without element or coords fails"
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Continue'
           $output = & ./target/debug/agent-desktop.exe click 2>&1 | Out-String
           Write-Host $output
           if ($LASTEXITCODE -eq 0) { throw "Expected failure" }
