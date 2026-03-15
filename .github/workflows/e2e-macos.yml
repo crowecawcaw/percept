@@ -19,20 +19,21 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Build
-        run: cargo build --verbose
+        run: cargo test --features e2e --test e2e_live --no-run
 
       - name: Grant accessibility permissions via TCC database
         run: |
-          # Grant accessibility to the agent-desktop binary, osascript, bash, and Terminal
+          # Grant accessibility to the agent-desktop binary, test harness, osascript, and shells
           BINARY="$(pwd)/target/debug/agent-desktop"
+          TEST_BINARY=$(find target/debug/deps -name 'e2e_live-*' -type f -perm +111 | head -1)
           sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" \
             "INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, flags) VALUES
               ('kTCCServiceAccessibility', '${BINARY}', 1, 2, 0, 1, 0),
+              ('kTCCServiceAccessibility', '$(pwd)/${TEST_BINARY}', 1, 2, 0, 1, 0),
               ('kTCCServiceAccessibility', '/usr/bin/osascript', 1, 2, 0, 1, 0),
               ('kTCCServiceAccessibility', '/bin/bash', 1, 2, 0, 1, 0),
               ('kTCCServiceAccessibility', '/bin/zsh', 1, 2, 0, 1, 0);"
-          echo "TCC grants applied"
-          # Verify the binary sees itself as trusted
+          echo "TCC grants applied for: ${BINARY} and ${TEST_BINARY}"
           swift -e 'import ApplicationServices; print("AXIsProcessTrusted:", AXIsProcessTrusted())'
 
       - name: Launch TextEdit for testing
@@ -42,4 +43,4 @@ jobs:
           pgrep -x TextEdit && echo "TextEdit is running" || (echo "TextEdit failed to launch" && exit 1)
 
       - name: Run e2e tests
-        run: ./e2e/e2e-macos.sh ./target/debug/agent-desktop
+        run: cargo test --features e2e --test e2e_live --verbose

@@ -33,9 +33,6 @@ jobs:
             libatk1.0-0 \
             libatk-bridge2.0-0
 
-      - name: Build
-        run: cargo build --verbose
-
       - name: Start Xvfb, D-Bus, AT-SPI2, window manager, and GUI app
         run: |
           # Start virtual X display
@@ -76,4 +73,4 @@ jobs:
           pgrep -a at-spi2 || echo "at-spi2 not running"
 
       - name: Run e2e tests
-        run: ./e2e/e2e-linux.sh ./target/debug/agent-desktop
+        run: cargo test --features e2e --test e2e_live --verbose

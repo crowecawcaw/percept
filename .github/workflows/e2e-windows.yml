@@ -18,9 +18,6 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Build
-        run: cargo build --verbose
-
       - name: Launch Notepad and save PID
         id: notepad
         shell: pwsh
@@ -32,5 +29,6 @@ jobs:
           echo "PID=$($proc.Id)" >> $env:GITHUB_OUTPUT
 
       - name: Run e2e tests
-        shell: pwsh
-        run: .\e2e\e2e-windows.ps1 -Bin .\target\debug\agent-desktop.exe -NotepadPid ${{ steps.notepad.outputs.PID }}
+        env:
+          NOTEPAD_PID: ${{ steps.notepad.outputs.PID }}
+        run: cargo test --features e2e --test e2e_live --verbose
