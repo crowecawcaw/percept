@@ -157,7 +157,7 @@ pub fn run_observe(
     let all_apps = app.is_none() && pid.is_none();
     let effective_depth = max_depth.unwrap_or(if all_apps { 1 } else { 10 });
 
-    let roles = role_filter.map(ElementRole::parse_filter);
+    let roles = role_filter.map(crate::types::parse_role_filter);
 
     // When a query is provided, use a higher internal traversal limit
     // so the query can match broadly before we apply the output limit.
@@ -593,11 +593,11 @@ fn print_json_bfs(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{AccessibilityElement, ElementRole, ElementStates};
+    use crate::types::{AccessibilityElement, ElementStates, Role};
 
     fn make_element(
         id: u32,
-        role: ElementRole,
+        role: Role,
         name: Option<&str>,
         children: Vec<u32>,
         parent: Option<u32>,
@@ -605,7 +605,7 @@ mod tests {
     ) -> AccessibilityElement {
         AccessibilityElement {
             id,
-            role_name: role.display_name().to_string(),
+            role_name: role.to_snake_case().to_string(),
             role,
             name: name.map(|s| s.to_string()),
             value: None,
@@ -632,14 +632,14 @@ mod tests {
     ///   7
     fn make_sample_tree() -> Vec<AccessibilityElement> {
         vec![
-            make_element(0, ElementRole::Window, Some("Root"), vec![1, 2, 3], None, 0),
-            make_element(1, ElementRole::Toolbar, Some("Bar"), vec![4, 5], Some(0), 1),
-            make_element(2, ElementRole::Group, Some("G1"), vec![6], Some(0), 1),
-            make_element(3, ElementRole::Button, Some("Btn1"), vec![], Some(0), 1),
-            make_element(4, ElementRole::Button, Some("Back"), vec![7], Some(1), 2),
-            make_element(5, ElementRole::TextField, Some("Search"), vec![], Some(1), 2),
-            make_element(6, ElementRole::StaticText, Some("Hello"), vec![], Some(2), 2),
-            make_element(7, ElementRole::Image, Some("Icon"), vec![], Some(4), 3),
+            make_element(0, Role::Window, Some("Root"), vec![1, 2, 3], None, 0),
+            make_element(1, Role::Toolbar, Some("Bar"), vec![4, 5], Some(0), 1),
+            make_element(2, Role::Group, Some("G1"), vec![6], Some(0), 1),
+            make_element(3, Role::Button, Some("Btn1"), vec![], Some(0), 1),
+            make_element(4, Role::Button, Some("Back"), vec![7], Some(1), 2),
+            make_element(5, Role::TextField, Some("Search"), vec![], Some(1), 2),
+            make_element(6, Role::StaticText, Some("Hello"), vec![], Some(2), 2),
+            make_element(7, Role::Image, Some("Icon"), vec![], Some(4), 3),
         ]
     }
 
@@ -738,7 +738,7 @@ mod tests {
     fn test_bfs_limit_single_element() {
         let tree = vec![make_element(
             0,
-            ElementRole::Window,
+            Role::Window,
             Some("Solo"),
             vec![],
             None,
@@ -758,12 +758,12 @@ mod tests {
         //  /|\
         // 3 4 5
         let tree = vec![
-            make_element(0, ElementRole::Window, Some("Root"), vec![1, 2], None, 0),
-            make_element(1, ElementRole::Group, Some("G"), vec![3, 4, 5], Some(0), 1),
-            make_element(2, ElementRole::Button, Some("B"), vec![], Some(0), 1),
-            make_element(3, ElementRole::Button, Some("B1"), vec![], Some(1), 2),
-            make_element(4, ElementRole::Button, Some("B2"), vec![], Some(1), 2),
-            make_element(5, ElementRole::TextField, Some("T"), vec![], Some(1), 2),
+            make_element(0, Role::Window, Some("Root"), vec![1, 2], None, 0),
+            make_element(1, Role::Group, Some("G"), vec![3, 4, 5], Some(0), 1),
+            make_element(2, Role::Button, Some("B"), vec![], Some(0), 1),
+            make_element(3, Role::Button, Some("B1"), vec![], Some(1), 2),
+            make_element(4, Role::Button, Some("B2"), vec![], Some(1), 2),
+            make_element(5, Role::TextField, Some("T"), vec![], Some(1), 2),
         ];
 
         // Limit to 5 — includes 0, 1, 2, 3, 4. Element 5 excluded.

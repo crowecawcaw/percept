@@ -1,6 +1,9 @@
 use anyhow::Result;
 
-use crate::types::{AccessibilityElement, AccessibilitySnapshot, AppTarget, ElementRole, QueryOptions};
+use crate::types::{
+    AccessibilityElement, AccessibilitySnapshot, AppTarget, QueryOptions,
+    parse_role_filter,
+};
 
 /// Get a shallow overview of all running applications
 pub fn get_all_apps_overview(opts: &QueryOptions) -> Result<AccessibilitySnapshot> {
@@ -14,9 +17,8 @@ pub fn get_all_apps_overview(opts: &QueryOptions) -> Result<AccessibilitySnapsho
 /// Get the accessibility tree, dispatching to the right platform
 pub fn get_tree(target: &AppTarget, opts: &QueryOptions) -> Result<AccessibilitySnapshot> {
     check_permissions_or_bail()?;
-    let xa_target = to_xa_target(target);
     let xa_opts = to_xa_query_opts(opts);
-    let tree = xa11y::app(&xa_target, &xa_opts)
+    let tree = xa11y::app(target, &xa_opts)
         .map_err(|e| anyhow::anyhow!("{}", e))?;
     Ok(tree_to_snapshot(&tree, opts))
 }
@@ -46,14 +48,14 @@ pub fn perform_action(element_id: u32, action: &str, value: Option<&str>) -> Res
         roles: if snapshot.query_roles.is_empty() {
             None
         } else {
-            Some(ElementRole::parse_filter(&snapshot.query_roles.join(",")))
+            Some(parse_role_filter(&snapshot.query_roles.join(",")))
         },
         include_raw: false,
     };
 
     check_permissions_or_bail()?;
 
-    let xa_target = xa11y::AppTarget::ByPid(snapshot.pid);
+    let xa_target = AppTarget::ByPid(snapshot.pid);
     let xa_opts = to_xa_query_opts(&opts);
     let tree = xa11y::app(&xa_target, &xa_opts)
         .map_err(|e| anyhow::anyhow!("{}", e))?;
@@ -83,21 +85,12 @@ fn check_permissions_or_bail() -> Result<()> {
     }
 }
 
-fn to_xa_target(target: &AppTarget) -> xa11y::AppTarget {
-    match target {
-        AppTarget::ByName(name) => xa11y::AppTarget::ByName(name.clone()),
-        AppTarget::ByPid(pid) => xa11y::AppTarget::ByPid(*pid),
-    }
-}
-
 fn to_xa_query_opts(opts: &QueryOptions) -> xa11y::QueryOptions {
     xa11y::QueryOptions {
         max_depth: Some(opts.max_depth),
         max_elements: Some(opts.max_elements),
         visible_only: opts.visible_only,
-        roles: opts.roles.as_ref().map(|roles| {
-            roles.iter().filter_map(|r| xa11y::Role::from_snake_case(r.display_name())).collect()
-        }),
+        roles: opts.roles.clone(),
     }
 }
 
@@ -123,52 +116,14 @@ fn parse_action(action: &str, value: Option<&str>) -> Result<(xa11y::Action, Opt
     }
 }
 
-fn xa_role_to_element_role(role: xa11y::Role) -> ElementRole {
-    match role {
-        xa11y::Role::Window => ElementRole::Window,
-        xa11y::Role::Application => ElementRole::Application,
-        xa11y::Role::Button => ElementRole::Button,
-        xa11y::Role::CheckBox => ElementRole::CheckBox,
-        xa11y::Role::RadioButton => ElementRole::RadioButton,
-        xa11y::Role::TextField => ElementRole::TextField,
-        xa11y::Role::StaticText | xa11y::Role::TextArea => ElementRole::StaticText,
-        xa11y::Role::ComboBox => ElementRole::ComboBox,
-        xa11y::Role::List => ElementRole::List,
-        xa11y::Role::ListItem => ElementRole::ListItem,
-        xa11y::Role::Menu => ElementRole::Menu,
-        xa11y::Role::MenuItem => ElementRole::MenuItem,
-        xa11y::Role::MenuBar => ElementRole::MenuBar,
-        xa11y::Role::Tab => ElementRole::Tab,
-        xa11y::Role::TabGroup => ElementRole::TabGroup,
-        xa11y::Role::Table => ElementRole::Table,
-        xa11y::Role::TableRow => ElementRole::TableRow,
-        xa11y::Role::TableCell => ElementRole::TableCell,
-        xa11y::Role::Toolbar => ElementRole::Toolbar,
-        xa11y::Role::ScrollBar => ElementRole::ScrollBar,
-        xa11y::Role::Slider => ElementRole::Slider,
-        xa11y::Role::Image => ElementRole::Image,
-        xa11y::Role::Link => ElementRole::Link,
-        xa11y::Role::Group => ElementRole::Group,
-        xa11y::Role::Dialog => ElementRole::Dialog,
-        xa11y::Role::Alert => ElementRole::Alert,
-        xa11y::Role::ProgressBar => ElementRole::ProgressBar,
-        xa11y::Role::TreeItem => ElementRole::TreeItem,
-        xa11y::Role::WebArea => ElementRole::WebArea,
-        xa11y::Role::Heading => ElementRole::Heading,
-        xa11y::Role::Separator => ElementRole::Separator,
-        xa11y::Role::SplitGroup => ElementRole::SplitGroup,
-        _ => ElementRole::Unknown,
-    }
-}
-
 fn tree_to_snapshot(tree: &xa11y::Tree, opts: &QueryOptions) -> AccessibilitySnapshot {
     let (screen_w, screen_h) = tree.screen_size;
 
     let mut elements: Vec<AccessibilityElement> = Vec::new();
 
     for node in tree.iter() {
-        let role = xa_role_to_element_role(node.role);
-        let role_name = role.display_name().to_string();
+        let role = node.role;
+        let role_name = role.to_snake_case().to_string();
 
         let bounds = node.bounds.map(|r| crate::types::ElementBounds {
             x: r.x,
@@ -238,7 +193,7 @@ fn tree_to_snapshot(tree: &xa11y::Tree, opts: &QueryOptions) -> AccessibilitySna
 
     let element_count = elements.len();
     let role_strs: Vec<String> = opts.roles.as_ref().map(|roles| {
-        roles.iter().map(|r| r.display_name().to_string()).collect()
+        roles.iter().map(|r| r.to_snake_case().to_string()).collect()
     }).unwrap_or_default();
 
     AccessibilitySnapshot {

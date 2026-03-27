@@ -403,11 +403,11 @@ fn collect_descendants(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{ElementBounds, ElementRole, ElementStates};
+    use crate::types::{ElementBounds, ElementStates, Role};
 
     fn make_element(
         id: u32,
-        role: ElementRole,
+        role: Role,
         name: Option<&str>,
         children: Vec<u32>,
         parent: Option<u32>,
@@ -415,7 +415,7 @@ mod tests {
     ) -> AccessibilityElement {
         AccessibilityElement {
             id,
-            role_name: role.display_name().to_string(),
+            role_name: role.to_snake_case().to_string(),
             role,
             name: name.map(|s| s.to_string()),
             value: None,
@@ -447,7 +447,7 @@ mod tests {
 
     fn make_element_with_value(
         id: u32,
-        role: ElementRole,
+        role: Role,
         name: Option<&str>,
         value: Option<&str>,
         children: Vec<u32>,
@@ -476,19 +476,19 @@ mod tests {
     ///         [13] button "Cancel"
     fn safari_tree() -> Vec<AccessibilityElement> {
         vec![
-            make_element(1, ElementRole::Application, Some("Safari"), vec![2], None, 0),
-            make_element(2, ElementRole::Window, Some("Safari — Google"), vec![3, 7], Some(1), 1),
-            make_element(3, ElementRole::Toolbar, None, vec![4, 5, 6], Some(2), 2),
-            make_element(4, ElementRole::Button, Some("Back"), vec![], Some(3), 3),
-            make_element(5, ElementRole::Button, Some("Forward"), vec![], Some(3), 3),
-            make_element(6, ElementRole::TextField, Some("Address and Search Bar"), vec![], Some(3), 3),
-            make_element(7, ElementRole::Group, Some("content"), vec![8], Some(2), 2),
-            make_element(8, ElementRole::WebArea, None, vec![9, 10, 11, 12, 13], Some(7), 3),
-            make_element(9, ElementRole::Heading, Some("Welcome"), vec![], Some(8), 4),
-            make_element(10, ElementRole::StaticText, Some("Hello world"), vec![], Some(8), 4),
-            make_element(11, ElementRole::Button, Some("Submit"), vec![], Some(8), 4),
-            make_element(12, ElementRole::TextField, Some("Email"), vec![], Some(8), 4),
-            make_element(13, ElementRole::Button, Some("Cancel"), vec![], Some(8), 4),
+            make_element(1, Role::Application, Some("Safari"), vec![2], None, 0),
+            make_element(2, Role::Window, Some("Safari — Google"), vec![3, 7], Some(1), 1),
+            make_element(3, Role::Toolbar, None, vec![4, 5, 6], Some(2), 2),
+            make_element(4, Role::Button, Some("Back"), vec![], Some(3), 3),
+            make_element(5, Role::Button, Some("Forward"), vec![], Some(3), 3),
+            make_element(6, Role::TextField, Some("Address and Search Bar"), vec![], Some(3), 3),
+            make_element(7, Role::Group, Some("content"), vec![8], Some(2), 2),
+            make_element(8, Role::WebArea, None, vec![9, 10, 11, 12, 13], Some(7), 3),
+            make_element(9, Role::Heading, Some("Welcome"), vec![], Some(8), 4),
+            make_element(10, Role::StaticText, Some("Hello world"), vec![], Some(8), 4),
+            make_element(11, Role::Button, Some("Submit"), vec![], Some(8), 4),
+            make_element(12, Role::TextField, Some("Email"), vec![], Some(8), 4),
+            make_element(13, Role::Button, Some("Cancel"), vec![], Some(8), 4),
         ]
     }
 
@@ -714,7 +714,7 @@ mod tests {
     fn match_by_value_attr() {
         let elem = make_element_with_value(
             1,
-            ElementRole::TextField,
+            Role::TextField,
             Some("Email"),
             Some("test@example.com"),
             vec![],
