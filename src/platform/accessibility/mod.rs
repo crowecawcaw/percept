@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use anyhow::Result;
 
 use crate::types::{
@@ -60,8 +62,14 @@ pub fn perform_action(element_id: u32, action: &str, value: Option<&str>) -> Res
     let tree = xa11y::app(&xa_target, &xa_opts)
         .map_err(|e| anyhow::anyhow!("{}", e))?;
 
-    let node = tree.get(element_id).ok_or_else(|| {
-        anyhow::anyhow!("Element {} not found in re-traversed tree", element_id)
+    // Our IDs are DFS iteration order — the nth node is element_id n
+    let nodes: Vec<_> = tree.iter().collect();
+    let node = nodes.get(element_id as usize).ok_or_else(|| {
+        anyhow::anyhow!(
+            "Element {} not found in re-traversed tree ({} elements)",
+            element_id,
+            nodes.len()
+        )
     })?;
 
     let (xa_action, xa_data) = parse_action(action, value)?;
@@ -119,9 +127,19 @@ fn parse_action(action: &str, value: Option<&str>) -> Result<(xa11y::Action, Opt
 fn tree_to_snapshot(tree: &xa11y::Tree, opts: &QueryOptions) -> AccessibilitySnapshot {
     let (screen_w, screen_h) = tree.screen_size;
 
-    let mut elements: Vec<AccessibilityElement> = Vec::new();
+    // Collect all nodes and assign our own IDs (DFS iteration order).
+    // Use pointer identity to map xa11y node references → our IDs.
+    let nodes: Vec<&xa11y::Node> = tree.iter().collect();
+    let ptr_to_id: HashMap<*const xa11y::Node, u32> = nodes
+        .iter()
+        .enumerate()
+        .map(|(i, n)| (*n as *const xa11y::Node, i as u32))
+        .collect();
 
-    for node in tree.iter() {
+    let mut elements: Vec<AccessibilityElement> = Vec::with_capacity(nodes.len());
+
+    for (id, node) in nodes.iter().enumerate() {
+        let id = id as u32;
         let role = node.role;
         let role_name = role.to_snake_case().to_string();
 
@@ -154,16 +172,22 @@ fn tree_to_snapshot(tree: &xa11y::Tree, opts: &QueryOptions) -> AccessibilitySna
             editable: node.states.editable,
         };
 
-        // Compute depth from parent chain
+        let children: Vec<u32> = tree
+            .children(node)
+            .iter()
+            .filter_map(|c| ptr_to_id.get(&(*c as *const xa11y::Node)).copied())
+            .collect();
+
+        let parent: Option<u32> = tree
+            .parent(node)
+            .and_then(|p| ptr_to_id.get(&(p as *const xa11y::Node)).copied());
+
+        // Compute depth by walking parent chain
         let mut depth = 0u32;
-        let mut current = node.parent_index;
-        while let Some(pidx) = current {
+        let mut cur = parent;
+        while let Some(pid) = cur {
             depth += 1;
-            if let Some(pnode) = tree.get(pidx) {
-                current = pnode.parent_index;
-            } else {
-                break;
-            }
+            cur = elements.get(pid as usize).and_then(|e| e.parent);
         }
 
         let raw = if opts.include_raw {
@@ -173,7 +197,7 @@ fn tree_to_snapshot(tree: &xa11y::Tree, opts: &QueryOptions) -> AccessibilitySna
         };
 
         elements.push(AccessibilityElement {
-            id: node.index,
+            id,
             role,
             role_name,
             name: node.name.clone(),
@@ -183,8 +207,8 @@ fn tree_to_snapshot(tree: &xa11y::Tree, opts: &QueryOptions) -> AccessibilitySna
             bbox,
             actions,
             states,
-            children: node.children_indices.clone(),
-            parent: node.parent_index,
+            children,
+            parent,
             depth,
             app: None,
             raw,
