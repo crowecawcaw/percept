@@ -1,96 +1,33 @@
-#[cfg(target_os = "linux")]
-mod linux;
-#[cfg(target_os = "macos")]
-mod macos;
-#[cfg(target_os = "windows")]
-mod windows;
+use std::collections::HashMap;
 
 use anyhow::Result;
 
-use crate::types::{AccessibilitySnapshot, AppTarget, ElementRole, PermissionStatus, QueryOptions};
-
-/// Platform-agnostic accessibility query interface
-pub trait AccessibilityProvider {
-    /// Get the accessibility tree for a specific application
-    fn get_app_tree(&self, app: &AppTarget, opts: &QueryOptions) -> Result<AccessibilitySnapshot>;
-
-    /// Get a shallow overview of all running applications.
-    /// Default implementation returns an error on unsupported platforms.
-    fn get_all_apps_tree(&self, _opts: &QueryOptions) -> Result<AccessibilitySnapshot> {
-        Err(anyhow::anyhow!(
-            "Listing all apps is not yet supported on this platform. Use --app <name> or --pid <pid>."
-        ))
-    }
-
-    /// Perform an action on an element (by element ID from the last snapshot)
-    fn perform_action(
-        &self,
-        element_id: u32,
-        action: &str,
-        value: Option<&str>,
-    ) -> Result<()>;
-
-    /// Check if accessibility permissions are granted
-    fn check_permissions(&self) -> Result<PermissionStatus>;
-}
-
-/// Create the platform-appropriate accessibility provider
-pub fn create_provider() -> Result<Box<dyn AccessibilityProvider>> {
-    #[cfg(target_os = "linux")]
-    {
-        Ok(Box::new(linux::LinuxAccessibilityProvider::new()?))
-    }
-    #[cfg(target_os = "macos")]
-    {
-        Ok(Box::new(macos::MacOSAccessibilityProvider::new()?))
-    }
-    #[cfg(target_os = "windows")]
-    {
-        Ok(Box::new(windows::WindowsAccessibilityProvider::new()?))
-    }
-    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
-    {
-        anyhow::bail!("Accessibility APIs are not supported on this platform")
-    }
-}
+use crate::types::{
+    AccessibilityElement, AccessibilitySnapshot, AppTarget, QueryOptions,
+    parse_role_filter,
+};
 
 /// Get a shallow overview of all running applications
 pub fn get_all_apps_overview(opts: &QueryOptions) -> Result<AccessibilitySnapshot> {
-    let provider = create_provider()?;
-    match provider.check_permissions()? {
-        PermissionStatus::Granted => {}
-        PermissionStatus::Denied { instructions } => {
-            anyhow::bail!(
-                "Accessibility permission denied.\n\n{}\n\nRe-run after granting permission.",
-                instructions
-            );
-        }
-    }
-    provider.get_all_apps_tree(opts)
+    check_permissions_or_bail()?;
+    let xa_opts = to_xa_query_opts(opts);
+    let tree = xa11y::all_apps(&xa_opts)
+        .map_err(|e| anyhow::anyhow!("{}", e))?;
+    Ok(tree_to_snapshot(&tree, opts))
 }
 
 /// Get the accessibility tree, dispatching to the right platform
 pub fn get_tree(target: &AppTarget, opts: &QueryOptions) -> Result<AccessibilitySnapshot> {
-    let provider = create_provider()?;
-
-    // Check permissions first
-    match provider.check_permissions()? {
-        PermissionStatus::Granted => {}
-        PermissionStatus::Denied { instructions } => {
-            anyhow::bail!(
-                "Accessibility permission denied.\n\n{}\n\nRe-run after granting permission.",
-                instructions
-            );
-        }
-    }
-
-    provider.get_app_tree(target, opts)
+    check_permissions_or_bail()?;
+    let xa_opts = to_xa_query_opts(opts);
+    let tree = xa11y::app(target, &xa_opts)
+        .map_err(|e| anyhow::anyhow!("{}", e))?;
+    Ok(tree_to_snapshot(&tree, opts))
 }
 
 /// Perform an accessibility action on an element.
 ///
-/// Because AXUIElementRef handles are process-local and can't be persisted,
-/// this re-traverses the application's accessibility tree using the same query
+/// Re-traverses the application's accessibility tree using the same query
 /// options that were recorded during `observe`. The traversal is deterministic
 /// (DFS), so element IDs match the ones the user saw in the previous snapshot
 /// as long as the application UI hasn't changed.
@@ -113,26 +50,186 @@ pub fn perform_action(element_id: u32, action: &str, value: Option<&str>) -> Res
         roles: if snapshot.query_roles.is_empty() {
             None
         } else {
-            Some(ElementRole::parse_filter(&snapshot.query_roles.join(",")))
+            Some(parse_role_filter(&snapshot.query_roles.join(",")))
         },
         include_raw: false,
     };
 
-    let provider = create_provider()?;
+    check_permissions_or_bail()?;
 
-    match provider.check_permissions()? {
-        PermissionStatus::Granted => {}
-        PermissionStatus::Denied { instructions } => {
+    let xa_target = AppTarget::ByPid(snapshot.pid);
+    let xa_opts = to_xa_query_opts(&opts);
+    let tree = xa11y::app(&xa_target, &xa_opts)
+        .map_err(|e| anyhow::anyhow!("{}", e))?;
+
+    // Our IDs are DFS iteration order — the nth node is element_id n
+    let nodes: Vec<_> = tree.iter().collect();
+    let node = nodes.get(element_id as usize).ok_or_else(|| {
+        anyhow::anyhow!(
+            "Element {} not found in re-traversed tree ({} elements)",
+            element_id,
+            nodes.len()
+        )
+    })?;
+
+    let (xa_action, xa_data) = parse_action(action, value)?;
+    xa11y::perform_action(&tree, node, xa_action, xa_data)
+        .map_err(|e| anyhow::anyhow!("{}", e))
+}
+
+// ---------------------------------------------------------------------------
+// Conversions
+// ---------------------------------------------------------------------------
+
+fn check_permissions_or_bail() -> Result<()> {
+    match xa11y::check_permissions().map_err(|e| anyhow::anyhow!("{}", e))? {
+        xa11y::PermissionStatus::Granted => Ok(()),
+        xa11y::PermissionStatus::Denied { instructions } => {
             anyhow::bail!(
                 "Accessibility permission denied.\n\n{}\n\nRe-run after granting permission.",
                 instructions
             );
         }
     }
+}
 
-    // Populate the in-process element cache by re-traversing the same app.
-    let target = AppTarget::ByPid(snapshot.pid);
-    provider.get_app_tree(&target, &opts)?;
+fn to_xa_query_opts(opts: &QueryOptions) -> xa11y::QueryOptions {
+    xa11y::QueryOptions {
+        max_depth: Some(opts.max_depth),
+        max_elements: Some(opts.max_elements),
+        visible_only: opts.visible_only,
+        roles: opts.roles.clone(),
+    }
+}
 
-    provider.perform_action(element_id, action, value)
+fn parse_action(action: &str, value: Option<&str>) -> Result<(xa11y::Action, Option<xa11y::ActionData>)> {
+    match action {
+        "press" | "click" | "activate" => Ok((xa11y::Action::Press, None)),
+        "focus" => Ok((xa11y::Action::Focus, None)),
+        "set-value" | "set_value" => {
+            let v = value.ok_or_else(|| anyhow::anyhow!("set-value requires a --value"))?;
+            Ok((xa11y::Action::SetValue, Some(xa11y::ActionData::Value(v.to_string()))))
+        }
+        "toggle" => Ok((xa11y::Action::Toggle, None)),
+        "expand" => Ok((xa11y::Action::Expand, None)),
+        "collapse" => Ok((xa11y::Action::Collapse, None)),
+        "select" => Ok((xa11y::Action::Select, None)),
+        "show-menu" | "show_menu" => Ok((xa11y::Action::ShowMenu, None)),
+        "increment" => Ok((xa11y::Action::Increment, None)),
+        "decrement" => Ok((xa11y::Action::Decrement, None)),
+        other => anyhow::bail!(
+            "Unknown action '{}'. Valid actions: press, focus, set-value, toggle, expand, collapse, select, show-menu, increment, decrement",
+            other
+        ),
+    }
+}
+
+fn tree_to_snapshot(tree: &xa11y::Tree, opts: &QueryOptions) -> AccessibilitySnapshot {
+    let (screen_w, screen_h) = tree.screen_size;
+
+    // Collect all nodes and assign our own IDs (DFS iteration order).
+    // Use pointer identity to map xa11y node references → our IDs.
+    let nodes: Vec<&xa11y::Node> = tree.iter().collect();
+    let ptr_to_id: HashMap<*const xa11y::Node, u32> = nodes
+        .iter()
+        .enumerate()
+        .map(|(i, n)| (*n as *const xa11y::Node, i as u32))
+        .collect();
+
+    let mut elements: Vec<AccessibilityElement> = Vec::with_capacity(nodes.len());
+
+    for (id, node) in nodes.iter().enumerate() {
+        let id = id as u32;
+        let role = node.role;
+        let role_name = role.to_snake_case().to_string();
+
+        let bounds = node.bounds.map(|r| crate::types::ElementBounds {
+            x: r.x,
+            y: r.y,
+            width: r.width as i32,
+            height: r.height as i32,
+        });
+
+        let bbox = bounds.as_ref().map(|b| {
+            crate::types::BoundingBox::from_pixel_bounds(b, screen_w, screen_h)
+        });
+
+        let actions: Vec<String> = node.actions.iter().map(|a| format!("{}", a).to_lowercase()).collect();
+
+        let checked = match node.states.checked {
+            Some(xa11y::Toggled::On) => Some(true),
+            Some(xa11y::Toggled::Off) | Some(xa11y::Toggled::Mixed) => Some(false),
+            None => None,
+        };
+
+        let states = crate::types::ElementStates {
+            enabled: node.states.enabled,
+            visible: node.states.visible,
+            focused: node.states.focused,
+            checked,
+            selected: node.states.selected,
+            expanded: node.states.expanded,
+            editable: node.states.editable,
+        };
+
+        let children: Vec<u32> = tree
+            .children(node)
+            .iter()
+            .filter_map(|c| ptr_to_id.get(&(*c as *const xa11y::Node)).copied())
+            .collect();
+
+        let parent: Option<u32> = tree
+            .parent(node)
+            .and_then(|p| ptr_to_id.get(&(p as *const xa11y::Node)).copied());
+
+        // Compute depth by walking parent chain
+        let mut depth = 0u32;
+        let mut cur = parent;
+        while let Some(pid) = cur {
+            depth += 1;
+            cur = elements.get(pid as usize).and_then(|e| e.parent);
+        }
+
+        let raw = if opts.include_raw {
+            serde_json::to_value(&node.raw).ok()
+        } else {
+            None
+        };
+
+        elements.push(AccessibilityElement {
+            id,
+            role,
+            role_name,
+            name: node.name.clone(),
+            value: node.value.clone(),
+            description: node.description.clone(),
+            bounds,
+            bbox,
+            actions,
+            states,
+            children,
+            parent,
+            depth,
+            app: None,
+            raw,
+        });
+    }
+
+    let element_count = elements.len();
+    let role_strs: Vec<String> = opts.roles.as_ref().map(|roles| {
+        roles.iter().map(|r| r.to_snake_case().to_string()).collect()
+    }).unwrap_or_default();
+
+    AccessibilitySnapshot {
+        app_name: tree.app_name.clone(),
+        pid: tree.pid.unwrap_or(0),
+        screen_width: screen_w,
+        screen_height: screen_h,
+        element_count,
+        elements,
+        query_max_depth: opts.max_depth,
+        query_max_elements: opts.max_elements,
+        query_visible_only: opts.visible_only,
+        query_roles: role_strs,
+    }
 }

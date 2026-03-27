@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 use crate::platform::accessibility;
 use crate::query;
 use crate::state::AppState;
-use crate::types::*;
+use crate::types::{AppTarget, QueryOptions};
 
 pub fn run_wait(
     query_str: &str,

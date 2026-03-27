@@ -192,19 +192,7 @@ fn observe_invalid_app_fails() {
         );
 }
 
-#[test]
-#[cfg(target_os = "windows")]
-fn observe_without_app_fails_on_windows() {
-    agent_desktop()
-        .arg("observe")
-        .assert()
-        .failure()
-        .stderr(
-            predicate::str::contains("not supported")
-                .or(predicate::str::contains("error")
-                    .or(predicate::str::contains("Error"))),
-        );
-}
+// observe without --app now works on Windows via xa11y's all_apps support
 
 // =============================================================================
 // Focus
